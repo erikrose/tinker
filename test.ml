@@ -1,8 +1,9 @@
 open Llvm
 
-let _ =
-  let llctx = global_context () in
-  let llmem = Llvm.MemoryBuffer.of_file Sys.argv.(1) in
-  let llm = Llvm_bitreader.parse_bitcode llctx llmem in
-  Llvm.dump_module llm ;
-  ()
+let main () =
+  let context = global_context () in
+  let the_module = create_module context "my singleton module" in
+  let builder = builder context in
+  dump_module the_module
+  
+let () = main ()
