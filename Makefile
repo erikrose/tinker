@@ -1,17 +1,22 @@
-all: main
+all: a.out
 
-main: main.c code.o
-	clang -O3 main.c code.o
+a.out: main.c build/code.o
+	clang -O3 main.c build/code.o
 
-code.o: compile.native
-	./compile.native 2> code.ll
-	clang -O3 -S code.ll
-	clang -O3 -c code.s
+run: a.out
+	@./a.out
 
-compile.native:
+build/code.o: compile.native
+	mkdir -p build
+	./compile.native 2> build/code.ll
+	cd build && clang -O3 -S code.ll
+	cd build && clang -O3 -c code.s
+
+compile.native: *.ml
+	rm -f code.o
 	ocamlbuild -pkgs llvm,llvm.analysis compile.native
 
 clean:
-	rm -rf _build compile.native code.ll code.s code.o
+	rm -rf _build compile.native build a.out
 
-.PHONY: all clean
+.PHONY: all clean run
