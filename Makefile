@@ -1,9 +1,10 @@
 all: a.out
 
-a.out: main.c build/code.o
-	clang -O3 main.c build/code.o
+a.out: build/code.o
+	clang -O3 build/code.o
 
 run: a.out
+    # Emits 160 (which is probably the integral representation of 33 as a float).
 	@./a.out
 
 build/code.o: compile.native
