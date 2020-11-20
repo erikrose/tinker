@@ -1,9 +1,25 @@
 open Llvm
 open Llvm_analysis
 
-let codegen_expr body context =
+exception Error of string
+
+let rec codegen_expr context the_module builder body =
   match body with
   | Ast.Number n -> const_float (double_type context) n
+  | Ast.Call (callee, args) ->
+      (* Look up the name in the module table. *)
+      let callee =
+        match lookup_function callee the_module with
+        | Some callee -> callee
+        | None -> raise (Error "unknown function referenced")
+      in
+      let params = params callee in
+
+      (* If argument mismatch error. *)
+      if Array.length params == Array.length args then () else
+        raise (Error "incorrect # arguments passed");
+      let args = Array.map (codegen_expr context the_module builder) args in
+      build_call callee args "calltmp" builder
 
 let codegen_proto proto context the_module =
   match proto with
@@ -11,9 +27,10 @@ let codegen_proto proto context the_module =
     (* Make the function type: double(double,double) etc. *)
     let double_type = double_type context in
     let doubles = Array.make (Array.length args) double_type in
-    (* Return type and arg types: *)
-    let types = function_type double_type doubles in
-    declare_function name types the_module
+    (* Return and arg types: *)
+    let signature = function_type double_type doubles in
+    declare_function name signature the_module
+    (* TODO: Error if a function gets redeclared. *)
 
 let codegen_func func context the_module builder =
   match func with
@@ -25,7 +42,7 @@ let codegen_func func context the_module builder =
     position_at_end bb builder;
 
     (* Get code for body *)
-    let ret_val = codegen_expr body context in
+    let ret_val = codegen_expr context the_module builder body in
 
     (* Finish off the function. *)
     let _ = build_ret ret_val builder in
