@@ -1,0 +1,6 @@
+Alright, now I can lay down a main(), print stuff, call external code, return a status code.
+
+To do:
+* Compile all the way to an executable without needing other shell commands.
+* Study what I've written to get an understanding of the LLVM API.
+* Design language.
