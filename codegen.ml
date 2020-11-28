@@ -45,7 +45,7 @@ let codegen_func func context the_module builder =
     let ret_val = codegen_expr context the_module builder body in
 
     (* Finish off the function. *)
-    let _ = build_ret ret_val builder in
+    let () = ignore (build_ret ret_val builder) in
 
     (* Validate the generated code, checking for consistency. *)
     assert_valid_function the_function;
