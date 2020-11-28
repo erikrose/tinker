@@ -15,11 +15,11 @@ let rec codegen_expr context the_module builder body =
       in
       let params = params callee in
 
-      (* If argument mismatch error. *)
+      (* If argument mismatch error: *)
       if Array.length params == Array.length args then () else
         raise (Error "incorrect # arguments passed");
-      let args = Array.map (codegen_expr context the_module builder) args in
-      build_call callee args "calltmp" builder
+      let genned_args = Array.map (codegen_expr context the_module builder) args in
+      build_call callee genned_args "calltmp" builder
 
 let codegen_proto proto context the_module =
   match proto with
@@ -37,17 +37,17 @@ let codegen_func func context the_module builder =
   | Ast.Function (proto, body) ->
     let the_function = codegen_proto proto context the_module in
 
-    (* Create a new basic block to start insertion into. *)
+    (* Create a new basic block, and point the builder to the end of it: *)
     let bb = append_block context "entry" the_function in
     position_at_end bb builder;
 
-    (* Get code for body *)
+    (* Codegen body: *)
     let ret_val = codegen_expr context the_module builder body in
 
-    (* Finish off the function. *)
-    let () = ignore (build_ret ret_val builder) in
+    (* Return the computed value of the body expression: *)
+    ignore (build_ret ret_val builder);
 
-    (* Validate the generated code, checking for consistency. *)
+    (* Validate the generated code, checking for consistency: *)
     assert_valid_function the_function;
 
     the_function

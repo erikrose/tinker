@@ -6,12 +6,12 @@ let main () =
   let builder = builder context in
 
   let print_double_proto = Ast.Prototype ("print_double", [| "f" |]) in
-  let () = ignore (Codegen.codegen_proto print_double_proto context the_module) in
+  ignore (Codegen.codegen_proto print_double_proto context the_module);
 
   let main_proto = Ast.Prototype ("main", [| |]) in
   let main = Ast.Function (main_proto,
                            Ast.Call("print_double", [| Number 33. |])) in
-  let () = ignore (Codegen.codegen_func main context the_module builder) in
+  ignore (Codegen.codegen_func main context the_module builder);
 
   dump_module the_module
 
