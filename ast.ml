@@ -9,5 +9,5 @@ type expr =
  * function takes). *)
 type proto = Prototype of string * string array
 
-(* func - This type represents a function definition itself. *)
+(* func - This is a function that has an implementation in this module. *)
 type func = Function of proto * expr
