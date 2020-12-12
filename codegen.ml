@@ -7,19 +7,19 @@ let rec codegen_expr context the_module builder body =
   match body with
   | Ast.Number n -> const_float (double_type context) n
   | Ast.Call (callee, args) ->
-      (* Look up the name in the module table. *)
-      let callee =
-        match lookup_function callee the_module with
-        | Some callee -> callee
-        | None -> raise (Error "unknown function referenced")
-      in
-      let params = params callee in
+    (* Look up the name in the module table. *)
+    let callee =
+      match lookup_function callee the_module with
+      | Some callee -> callee
+      | None -> raise (Error "unknown function referenced")
+    in
+    let params = params callee in
 
-      (* If argument mismatch error: *)
-      if Array.length params == Array.length args then () else
-        raise (Error "incorrect # arguments passed");
-      let genned_args = Array.map (codegen_expr context the_module builder) args in
-      build_call callee genned_args "calltmp" builder
+    (* If argument mismatch error: *)
+    if Array.length params == Array.length args then () else
+      raise (Error "incorrect # arguments passed");
+    let genned_args = Array.map (codegen_expr context the_module builder) args in
+    build_call callee genned_args "calltmp" builder
 
 let codegen_proto proto context the_module =
   match proto with
