@@ -21,9 +21,8 @@ let rec codegen_expr context the_module builder body =
     let genned_args = Array.map (codegen_expr context the_module builder) args in
     build_call callee genned_args "calltmp" builder
   | Ast.String (str) ->
-    build_global_stringptr str "someString" builder (* TODO: Make up a unique string name each time. *)
+    build_global_stringptr str "" builder
     (* const_stringz context str (* representation of i8 array *)*)
-
 
 let codegen_proto proto context the_module =
   match proto with
