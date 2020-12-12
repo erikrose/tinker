@@ -1,6 +1,10 @@
 Alright, now I can lay down a main(), print stuff, call external code, return a status code.
 
 To do:
-* Compile all the way to an executable without needing other shell commands.
-* Study what I've written to get an understanding of the LLVM API.
+* √ Be able to declare externals so we don't need any C.
+    * We'd need strings too, though (or at least "bytes"), for printf's format string. So add externals support and support for multiple types.
+* Compile all the way to an executable without needing other shell commands. (Call LLVM's linker internally.)
+    * https://lld.llvm.org/
+    * "You can embed LLD in your program to eliminate dependencies on external linkers. All you have to do is to construct object files and command line arguments just like you would do to invoke an external linker and then call the linker’s main function, lld::elf::link, from your code."
+* √ Study what I've written to get an understanding of the LLVM API.
 * Design language.

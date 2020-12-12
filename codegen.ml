@@ -20,15 +20,24 @@ let rec codegen_expr context the_module builder body =
       raise (Error "incorrect # arguments passed");
     let genned_args = Array.map (codegen_expr context the_module builder) args in
     build_call callee genned_args "calltmp" builder
+  | Ast.String (str) ->
+    build_global_stringptr str "someString" builder (* TODO: Make up a unique string name each time. *)
+    (* const_stringz context str (* representation of i8 array *)*)
+
 
 let codegen_proto proto context the_module =
   match proto with
-  | Ast.Prototype (name, args) ->
+  | Ast.Prototype (name, arg_types) ->
     (* Make the function type: double(double,double) etc. *)
     let double_type = double_type context in
-    let doubles = Array.make (Array.length args) double_type in
+    let llvm_types = Array.init (Array.length arg_types)
+                               (fun i -> match arg_types.(i) with
+                                         | NumberType -> double_type
+                                         | StringType length -> array_type (i8_type context) length
+                                         | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
+                                         | VoidType -> void_type context) in
     (* Return and arg types: *)
-    let signature = function_type double_type doubles in
+    let signature = function_type double_type llvm_types in
     declare_function name signature the_module
     (* TODO: Error if a function gets redeclared. *)
 

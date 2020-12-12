@@ -1,10 +1,10 @@
 all: a.out
 
-a.out: build/code.o print_double.c
-	clang -O3 print_double.c build/code.o
+a.out: build/code.o
+	clang -O3 build/code.o
 
 run: a.out
-	# Emits 112, which is the integral representation of 0 as a double.
+	# Emits the return value of puts()
 	./a.out
 
 build:
