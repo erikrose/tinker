@@ -25,20 +25,22 @@ let rec codegen_expr context the_module builder body =
     build_global_stringptr str "" builder
     (* const_stringz context str (* representation of i8 array *)*)
 
+(* Return the LLVM type corresponding to one of our AST "tipes". *)
+let llvm_type ast_type context =
+  match ast_type with
+  | Ast.DoubleType -> double_type context
+  | IntType -> i64_type context (* TODO: make portable *)
+  | StringType length -> array_type (i8_type context) length
+  | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
+  | VoidType -> void_type context
+
 let codegen_proto proto context the_module =
   match proto with
-  | Ast.Prototype (name, arg_types) ->
+  | Ast.Prototype (name, arg_types, ret_type) ->
     (* Make the function type: double(double,double) etc. *)
-    let double_type = double_type context in
-    let llvm_types = Array.init (Array.length arg_types)
-                               (fun i -> match arg_types.(i) with
-                                         | DoubleType -> double_type
-                                         | IntType -> i64_type context (* TODO: make portable *)
-                                         | StringType length -> array_type (i8_type context) length
-                                         | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
-                                         | VoidType -> void_type context) in
+    let llvm_arg_types = Array.init (Array.length arg_types) (fun i -> llvm_type arg_types.(i) context) in
     (* Return and arg types: *)
-    let signature = function_type double_type llvm_types in
+    let signature = function_type (llvm_type ret_type context) llvm_arg_types in
     declare_function name signature the_module
     (* TODO: Error if a function gets redeclared. *)
 
