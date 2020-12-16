@@ -5,7 +5,8 @@ exception Error of string
 
 let rec codegen_expr context the_module builder body =
   match body with
-  | Ast.Number n -> const_float (double_type context) n
+  | Ast.Double n -> const_float (double_type context) n
+  | Ast.Int n -> const_int (i64_type context) n
   | Ast.Call (callee, args) ->
     (* Look up the name in the module table. *)
     let callee =
@@ -19,7 +20,7 @@ let rec codegen_expr context the_module builder body =
     if Array.length params == Array.length args then () else
       raise (Error "incorrect # arguments passed");
     let genned_args = Array.map (codegen_expr context the_module builder) args in
-    build_call callee genned_args "calltmp" builder
+    build_call callee genned_args "calltmp" builder (* TODO: Stop naming this. Won't it collide with other calls in the same bb? *)
   | Ast.String (str) ->
     build_global_stringptr str "" builder
     (* const_stringz context str (* representation of i8 array *)*)
@@ -31,7 +32,8 @@ let codegen_proto proto context the_module =
     let double_type = double_type context in
     let llvm_types = Array.init (Array.length arg_types)
                                (fun i -> match arg_types.(i) with
-                                         | NumberType -> double_type
+                                         | DoubleType -> double_type
+                                         | IntType -> i64_type context (* TODO: make portable *)
                                          | StringType length -> array_type (i8_type context) length
                                          | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
                                          | VoidType -> void_type context) in

@@ -1,12 +1,14 @@
 (* expr - Base type for all expression nodes. *)
 type expr =
   (* variant for numeric literals like "1.0". *)
-  | Number of float
+  | Double of float
+  | Int of int (* semantic: 64-bit int *)
   | Call of string * expr array
   | String of string
 
 type tipe =
-  | NumberType
+  | DoubleType
+  | IntType
   | StringType of int (* length *)
   | StringPtrType
   | VoidType
