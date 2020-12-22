@@ -10,7 +10,10 @@ let main () =
 
   let main_proto = Ast.Prototype ("main", [| |], IntType) in
   let main = Ast.Function (main_proto,
-                           Ast.Call("puts", [| String ("howdy") |])) in
+                           Ast.Block([|
+                                        Ast.Call("puts", [| String ("howdy") |]);
+                                        Ast.Call("puts", [| String ("bowdy") |])
+                                     |])) in
   ignore (Codegen.codegen_func main context the_module builder);
 
   dump_module the_module

@@ -20,10 +20,17 @@ let rec codegen_expr context the_module builder body =
     if Array.length params == Array.length args then () else
       raise (Error "incorrect # arguments passed");
     let genned_args = Array.map (codegen_expr context the_module builder) args in
-    build_call callee genned_args "calltmp" builder (* TODO: Stop naming this. Won't it collide with other calls in the same bb? *)
-  | Ast.String (str) ->
+    build_call callee genned_args "" builder (* TODO: Stop naming this. Won't it collide with other calls in the same bb? *)
+  | Ast.String str ->
     build_global_stringptr str "" builder
-    (* const_stringz context str (* representation of i8 array *)*)
+  | Ast.Block exprs ->
+    (* The value of a block is the value of its last evaluated expression. *)
+    let last_expr_value _ cur_expr =
+      codegen_expr context the_module builder cur_expr
+    in
+    (* This null value will do for now, but it might not be the final one we want: *)
+    let null_value = const_null (void_type context) in
+    Array.fold_left last_expr_value null_value exprs
 
 (* Return the LLVM type corresponding to one of our AST "tipes". *)
 let llvm_type ast_type context =
