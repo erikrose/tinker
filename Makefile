@@ -21,7 +21,7 @@ build/code.o: build/code.s
 	cd build && clang -O3 -c code.s
 
 compile.native: *.ml
-	rm -f code.o
+	rm -f build/code.o
 	ocamlbuild -pkgs llvm,llvm.analysis compile.native
 
 clean:
