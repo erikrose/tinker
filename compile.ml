@@ -12,7 +12,7 @@ let main () =
   let main = Ast.Function (main_proto,
                            Ast.Block([|
                                         Ast.Call("puts", [| String ("howdy") |]);
-                                        Ast.Call("puts", [| String ("bowdy") |])
+                                        Ast.Call("puts", [| Ast.If(Int(1), String("true"), String("false")) |])
                                      |])) in
   ignore (Codegen.codegen_func main context the_module builder);
 
