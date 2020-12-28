@@ -18,7 +18,7 @@ Everything is vague and loosely held at the moment. Consider this a sketch.
 * Still no variable declarations, folks. They're noise to read and bookkeeping to do. Being able to use tighter-scoped vars as a crutch inside a function that should be made shorter anyway is not sufficient justification. Having vars go out of scope as soon as they're no longer used should be a matter for the optimizer (and should matter only for embedded systems). (But should we be able to rebind a var to a string later in a function if it was an int earlier?)
 * Definitely want to be able to pass functions around. (Thus, compile-time call graphs will not always be exhaustive, limiting some optimizations. However, I imagine we can still do optimizations for static function calls.)
 * I love iterators. Probably have those.
-* Perhaps avoid breaking-returns. Though it sure is nice to be able to grep for return statements when trying to figure out what a function returns.
+* Perhaps avoid breaking-returns. Though it sure is nice to be able to grep for return statements when trying to figure out what a function returns. And explicit returns are also nice because you don't then end up accidentally returning stuff which callers then come to depend on. Or unintentionally making your return type non-void. Alright, I've talked myself out of it.
 * List comps with filters. Map/reduce. All those things that let you focus syntactically on what you want, not how to get it. Resolve all applicable questions in favor of what lets you focus on what you want rather than how to get it. That's what you care about when trying to understand a program, which is how most time is spent.
 * ? Block-structured or function-scoped? Probably the latter. OCaml-style block structuring weirds language, making var bindings start new blocks, which people can't tolerate the indentation of, so then they weird the indentation, and then the block representation has to live in your head, and semicolons crop up in nonobvious places. Function scoping is a nice middleground where you can have an open playground (for fast development and prototyping) but bounded by the limits of the function.
 * Probably don't autocurry. It makes for confusing error messages for noobs.
@@ -94,4 +94,8 @@ Right now, "Hello, world" is hard-coded into the compiler in the form of AST exp
     * "You can embed LLD in your program to eliminate dependencies on external linkers. All you have to do is to construct object files and command line arguments just like you would do to invoke an external linker and then call the linker’s main function, lld::elf::link, from your code."
 * √ Be able to do multiple statements.
 * √ Study what I've written to get an understanding of the LLVM API.
+* Add ifs (multiple basic blocks).
+* Decide on dispatch. Will it be hard for a human to find where a function's code is?
+* Do non-primitive types, like ML enums, probably with type erasure, which would mean an IR or at least symbol tables to keep track of what types things are.
+* We might be able to get away with just recursion for type inference, as long as we explicitly declare function args and return types (at least temporarily): https://mukulrathi.co.uk/create-your-own-programming-language/intro-to-type-checking/
 * Design the language.
