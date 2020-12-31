@@ -94,7 +94,7 @@ Right now, "Hello, world" is hard-coded into the compiler in the form of AST exp
     * "You can embed LLD in your program to eliminate dependencies on external linkers. All you have to do is to construct object files and command line arguments just like you would do to invoke an external linker and then call the linker’s main function, lld::elf::link, from your code."
 * √ Be able to do multiple statements.
 * √ Study what I've written to get an understanding of the LLVM API.
-* Add ifs (multiple basic blocks).
+* √ Add ifs (multiple basic blocks).
 * Decide on dispatch. Will it be hard for a human to find where a function's code is?
 * Do non-primitive types, like ML enums, probably with type erasure, which would mean an IR or at least symbol tables to keep track of what types things are.
 * We might be able to get away with just recursion for type inference, as long as we explicitly declare function args and return types (at least temporarily): https://mukulrathi.co.uk/create-your-own-programming-language/intro-to-type-checking/

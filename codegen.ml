@@ -32,35 +32,58 @@ let rec codegen_expr context the_module builder body =
     let null_value = const_null (void_type context) in
     Array.fold_left last_expr_value null_value exprs
   | Ast.If (condition, then_, else_) ->
-    (* Position the builder at the end of a new block, codegen it?, and return the block where the codegen ends up.  *)
-    (* let end_of_new_block =  *)
-  
+    (* Generate something along these lines. It's very hard to understand the
+     * if-generation code without this as a reference.
+     *
+     * entry:
+     *   %ifcond = <condition_value>
+     *   br i1 %ifcond, label %then, label %else
+     *
+     * then:                                             ; preds = %entry
+     *   <whatever code is in the then block>
+     *   br label %ifcont
+     *
+     * else:                                             ; preds = %entry
+     *   <whatever code is in the else block>
+     *   br label %ifcont
+     *
+     * ifcont:                                           ; preds = %else, %then
+     *   %iftmp = phi i8* [ <then_value>, %then ], [ <else_value>, %else ]
+     *   %1 = call i64 @puts(i8* %iftmp)
+     *   ret i64 %1
+     *)
+
     let condition_value = codegen_expr context the_module builder condition in
     let int_zero = const_null (i64_type context) in (* TODO: Support taking other types of condition than int. *)
     let comparison = build_icmp Icmp.Ne condition_value int_zero "ifcond" builder in
-    
+
     (* Save old BB, and start a new one for the "then" expr: *)
     let start_bb = insertion_block builder in
     let the_function = block_parent start_bb in
 
-    (* Emit the "then" bb: *)
-    let then_bb = append_block context "then" the_function in
-    position_at_end then_bb builder;
-    let then_value = codegen_expr context the_module builder then_ in
+    (** Create a bb for a "then" or "else" branch of an if.
+     *
+     * Create a new bb, codegen the given expression as its contents and value,
+     * and return the bb to branch to and the one (possibly different) to phi
+     * from. (Codegen of the expr can change the current block.) Note that this
+     * function changes the builder's position.
+     *
+     * @param name A name to use as the label of the block, just for human
+     *   comprehensibility
+     *)
+    let new_bb_with_expr name contents =
+      let bb_for_branch = append_block context name the_function in
+      position_at_end bb_for_branch builder;
+      let value = codegen_expr context the_module builder contents in
+      let bb_for_phi = insertion_block builder in
+      (bb_for_branch, value, bb_for_phi)
+    in
 
-    (* Codegen of "then" can change the current block. Grab that for the
-     * phi. We create a new name because one is used for the phi node and the
-     * other is used for the conditional branch. *)
-    let new_then_bb = insertion_block builder in
+    (* Emit the "then" bb: *)
+    let (then_bb, then_value, new_then_bb) = new_bb_with_expr "then" then_ in
 
     (* Emit "else" bb: *)
-    let else_bb = append_block context "else" the_function in
-    position_at_end else_bb builder;
-    let else_value = codegen_expr context the_module builder else_ in
-
-    (* Codegen of 'else' can change the current block. Grab that for the
-     * phi. *)
-    let new_else_bb = insertion_block builder in
+    let (else_bb, else_value, new_else_bb) = new_bb_with_expr "else" else_ in
 
     (* Emit merge block: *)
     let merge_bb = append_block context "ifcont" the_function in
