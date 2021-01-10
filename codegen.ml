@@ -50,9 +50,8 @@ let rec codegen_expr context the_module builder body =
      * many bytes to copy. *)
     let genned_value = codegen_expr context the_module builder value in
     let (stack_slot, _) = Hashtbl.find vars name in
-    ignore (build_store genned_value stack_slot builder);
-    (* Return the assigned value: *)
-    genned_value  (* TODO: See if this is necessary. Maybe the ignored build_store above returns it. *)
+    (* Store and return the assigned value: *)
+    build_store genned_value stack_slot builder
   | Ast.Var name ->
     let (stack_slot, _) = Hashtbl.find vars name in
     build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
@@ -79,7 +78,7 @@ let rec codegen_expr context the_module builder body =
      *)
 
     let condition_value = codegen_expr context the_module builder condition in
-    let int_zero = const_null (i64_type context) in (* TODO: Support taking other types of condition than int. *)
+    let int_zero = const_null (i64_type context) in
     let comparison = build_icmp Icmp.Ne condition_value int_zero "ifcond" builder in
 
     (* Save old BB, and start a new one for the "then" expr: *)
@@ -160,32 +159,10 @@ let codegen_func func context the_module builder =
     
     (* Add allocas for all local vars. They have to be in the entry block, or
      * mem2reg won't work. *)
-    (* Go through the function, and see what vars are assigned to. Alloca those vars. I guess we need type inference for that. And then we'll need to keep track of their addresses and types in a hash table. Let's keep a stack of hash tables as a module global for now. (If we start compiling multithreaded, we can make it a per-thread stack.) (We don't need the stack for now, but it'll come in handy when we support nested functions.) This beats putting a ptr to the function on every AST node. It also beats passing the stack to every codegen invocation. (There will eventually be more bookkeeping things than just the symbol table, I'm sure.) *)
-    (* So next is assignments_in() and type inference, which can both be unit tested. *)
-    
-    (* TODO: Don't concretize the returned list. *)
-(*
-    let assignments_in expr =
-      let rec gather_assignments accum node in 
-        match node with
-          | Double -> accum
-          | Int -> accum
-          | Call (name, args) -> List.concat [List.map (gather_assignments []) args;
-                                              accum]
-          | String -> accum
-          | Block exprs -> List.concat [List.map (gather_assignments []) exprs;
-                                        accum]
-          | If (if_, then_, else_) -> List.concat [gather_assignments [] if_;
-                                                   gather_assignments [] then_;
-                                                   gather_assignments [] else_;
-                                                   accum]
-          | Var -> accum
-          | Assignment (var_name, value) -> node :: gather_assignments accum value
-      gather_assignments [] expr
-*)
 
     (* Return a List of the assigned var names in an expression. *)
     let rec assignments_in node =
+      (* TODO: Don't concretize the returned list. *)
       match node with
         | Ast.Double _ -> []
         | Ast.Int _ -> []
@@ -198,8 +175,8 @@ let codegen_func func context the_module builder =
         | Ast.Var _ -> []
         | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
     in
+    (* Gen the alloca, and add an entry to the symbol table: *)
     let add_local_var t var_name =
-      (* Gen the alloca, and add an entry to the symbol table: *)
       let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
       Hashtbl.replace vars var_name (stack_slot, t) in
 

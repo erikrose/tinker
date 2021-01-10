@@ -139,7 +139,8 @@ Right now, "Hello, world" is hard-coded into the compiler in the form of AST exp
     To implement: for each function, find the vars written to within it. Put those into a set. (This is faster than spidering all over the function anew for each ref.) As we codegen each var ref, look into those sets to figure out what stack frame to (if not already done) add the var to.
     We'll put all the `alloca` instructions in the entry block of the function so we can depend on `mem2reg` to convert them to register accesses.
     Sum types can be represented by alloca-ing enough space for the largest alternative and also making space (whether as a separate pseudovar or part of a struct that contains the enum and the var value) for the enum value. Make sure it works nicely with nested enumerations, like `foo:(int|Snoo);  Snoo = double|string`.
-* Complain on the possibility of undefined var reads.
+    * Complain on the possibility of undefined var reads.
+    * Support other types than int.
 * GC
 * Loops. All looping constructs can be lowered to an infinite loop plus a break statement. Infinite loops can be lowered to recursion with TCO. Not sure about the breaks.
 * Decide on dispatch. Will it be hard for a human to find where a function's code is?
