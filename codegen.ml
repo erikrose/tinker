@@ -3,6 +3,11 @@ open Llvm_analysis
 
 exception Error of string
 
+(* For the function currently being generated, a map of var name to memory
+ * location and type. This will become a stack of hash tables once we support
+ * nested functions. *)
+let vars:(string, (llvalue * Ast.tipe)) Hashtbl.t = Hashtbl.create ~random:true 20
+
 let rec codegen_expr context the_module builder body =
   match body with
   | Ast.Double n -> const_float (double_type context) n
@@ -17,10 +22,10 @@ let rec codegen_expr context the_module builder body =
     let params = params callee in
 
     (* If argument mismatch error: *)
-    if Array.length params == Array.length args then () else
+    if Array.length params == List.length args then () else
       raise (Error "incorrect # arguments passed");
-    let genned_args = Array.map (codegen_expr context the_module builder) args in
-    build_call callee genned_args "" builder (* TODO: Stop naming this. Won't it collide with other calls in the same bb? *)
+    let genned_args = List.map (codegen_expr context the_module builder) args in
+    build_call callee (Array.of_list genned_args) "" builder
   | Ast.String str ->
     build_global_stringptr str "" builder
   | Ast.Block exprs ->
@@ -30,7 +35,27 @@ let rec codegen_expr context the_module builder body =
     in
     (* This null value will do for now, but it might not be the final one we want: *)
     let null_value = const_null (void_type context) in
-    Array.fold_left last_expr_value null_value exprs
+    List.fold_left last_expr_value null_value exprs
+
+  (* Vars:
+     entry:
+       %X = alloca i32           ; type of %X is i32*.
+       %tmp = load i32* %X       ; load the stack value %X from the stack.
+       %tmp2 = add i32 %tmp, 1   ; increment it
+       store i32 %tmp2, i32* %X  ; store it back
+  *)
+  | Ast.Assignment (name, value) ->
+    (* Codegen the value expr, then store it at the address of `name` as given
+     * by the hash table. The hash table also gives the type so we know how
+     * many bytes to copy. *)
+    let genned_value = codegen_expr context the_module builder value in
+    let (stack_slot, _) = Hashtbl.find vars name in
+    ignore (build_store genned_value stack_slot builder);
+    (* Return the assigned value: *)
+    genned_value  (* TODO: See if this is necessary. Maybe the ignored build_store above returns it. *)
+  | Ast.Var name ->
+    let (stack_slot, _) = Hashtbl.find vars name in
+    build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
   | Ast.If (condition, then_, else_) ->
     (* Generate something along these lines. It's very hard to understand the
      * if-generation code without this as a reference.
@@ -132,6 +157,55 @@ let codegen_func func context the_module builder =
     (* Create a new basic block, and point the builder to the end of it: *)
     let bb = append_block context "entry" the_function in
     position_at_end bb builder;
+    
+    (* Add allocas for all local vars. They have to be in the entry block, or
+     * mem2reg won't work. *)
+    (* Go through the function, and see what vars are assigned to. Alloca those vars. I guess we need type inference for that. And then we'll need to keep track of their addresses and types in a hash table. Let's keep a stack of hash tables as a module global for now. (If we start compiling multithreaded, we can make it a per-thread stack.) (We don't need the stack for now, but it'll come in handy when we support nested functions.) This beats putting a ptr to the function on every AST node. It also beats passing the stack to every codegen invocation. (There will eventually be more bookkeeping things than just the symbol table, I'm sure.) *)
+    (* So next is assignments_in() and type inference, which can both be unit tested. *)
+    
+    (* TODO: Don't concretize the returned list. *)
+(*
+    let assignments_in expr =
+      let rec gather_assignments accum node in 
+        match node with
+          | Double -> accum
+          | Int -> accum
+          | Call (name, args) -> List.concat [List.map (gather_assignments []) args;
+                                              accum]
+          | String -> accum
+          | Block exprs -> List.concat [List.map (gather_assignments []) exprs;
+                                        accum]
+          | If (if_, then_, else_) -> List.concat [gather_assignments [] if_;
+                                                   gather_assignments [] then_;
+                                                   gather_assignments [] else_;
+                                                   accum]
+          | Var -> accum
+          | Assignment (var_name, value) -> node :: gather_assignments accum value
+      gather_assignments [] expr
+*)
+
+    (* Return a List of the assigned var names in an expression. *)
+    let rec assignments_in node =
+      match node with
+        | Ast.Double _ -> []
+        | Ast.Int _ -> []
+        | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
+        | Ast.String _ -> []
+        | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
+        | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
+                                                 assignments_in then_;
+                                                 assignments_in else_]
+        | Ast.Var _ -> []
+        | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
+    in
+    let add_local_var t var_name =
+      (* Gen the alloca, and add an entry to the symbol table: *)
+      let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
+      Hashtbl.replace vars var_name (stack_slot, t) in
+
+    (* For the moment, we support assigning only to ints, just so we can get
+     * vars proven out without having to write type inference first. *)
+    List.iter (add_local_var IntType) (assignments_in body);
 
     (* Codegen body: *)
     let ret_val = codegen_expr context the_module builder body in
@@ -142,4 +216,5 @@ let codegen_func func context the_module builder =
     (* Validate the generated code, checking for consistency: *)
     assert_valid_function the_function;
 
+    Hashtbl.reset vars;
     the_function

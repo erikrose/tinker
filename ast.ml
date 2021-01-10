@@ -2,10 +2,12 @@
 type expr =
   | Double of float
   | Int of int (* semantic: 64-bit int *)
-  | Call of string * expr array
+  | Call of string * expr list (* name, args *)
   | String of string
-  | Block of expr array (* A block is a sequence of expressions whose value is that of the last expression evaluated. This exists as a separate idea from functions because it might also occur in global namespace. Besides, it gives us the flexibility to become block-scoped at some point. *) (* TODO: Probably turn this into a list once we quit using AST literals. *)
-  | If of expr * expr * expr
+  | Block of expr list (* A block is a sequence of expressions whose value is that of the last expression evaluated. This exists as a separate idea from functions because it might also occur in global namespace. Besides, it gives us the flexibility to become block-scoped at some point. *) (* TODO: Probably turn this into a list once we quit using AST literals. *)
+  | If of expr * expr * expr (* condition, then, else *)
+  | Var of string (* var read *)
+  | Assignment of string * expr (* var write: name, value *)
   (* TODO: Why aren't functions and protos expressions? It would be nice for
      them to be. Then everything could have a type. *)
 
