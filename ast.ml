@@ -4,7 +4,11 @@ type expr =
   | Int of int (* semantic: 64-bit int *)
   | Call of string * expr list (* name, args *)
   | String of string
-  | Block of expr list (* A block is a sequence of expressions whose value is that of the last expression evaluated. This exists as a separate idea from functions because it might also occur in global namespace. Besides, it gives us the flexibility to become block-scoped at some point. *) (* TODO: Probably turn this into a list once we quit using AST literals. *)
+  (* A block is a sequence of expressions whose value is that of the last
+   * expression evaluated. This exists as a separate idea from functions
+   * because it might also occur in global namespace. Besides, it gives us the
+   * flexibility to become block-scoped at some point. *)
+  | Block of expr list
   | If of expr * expr * expr (* condition, then, else *)
   | Var of string (* var read *)
   | Assignment of string * expr (* var write: name, value *)
@@ -19,7 +23,7 @@ type tipe =
   | VoidType
 
 (* The "prototype" for a function, which captures its name, argument types, and
-   return type *)
+ * return type *)
 type proto = Prototype of string * tipe array * tipe
 
 (* A function that has an implementation in this module. *)

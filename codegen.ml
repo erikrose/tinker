@@ -164,15 +164,15 @@ let codegen_func func context the_module builder =
     let rec assignments_in node =
       (* TODO: Don't concretize the returned list. *)
       match node with
-        | Ast.Double _ -> []
-        | Ast.Int _ -> []
+        | Ast.Double _
+        | Ast.Int _
+        | Ast.String _
+        | Ast.Var _ -> []
         | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
-        | Ast.String _ -> []
         | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
         | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
-                                                 assignments_in then_;
-                                                 assignments_in else_]
-        | Ast.Var _ -> []
+                                                     assignments_in then_;
+                                                     assignments_in else_]
         | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
     in
     (* Gen the alloca, and add an entry to the symbol table: *)
@@ -182,6 +182,7 @@ let codegen_func func context the_module builder =
 
     (* For the moment, we support assigning only to ints, just so we can get
      * vars proven out without having to write type inference first. *)
+    (* TODO: Add a given var to the table only once. *)
     List.iter (add_local_var IntType) (assignments_in body);
 
     (* Codegen body: *)
