@@ -24,8 +24,9 @@ Everything is vague and loosely held at the moment. Consider this a sketch.
     Perhaps those are extremes and the middleground is just not having var declarations introduce new blocks, like C.
 * Pure enough to use for config. For example, it should be able to express metadata for its own modules, like language version #.
 * Probably exceptions. I don't see how to do Options without a lot of boilerplate (`.unwrap()` and `?` all over the place in Rust) that makes programs hard to read and just lays a lot of profitless bookkeeping on the user. "Just add question marks until the compiler is happy!" —-In that case, have you really improved anything over just throwing exceptions?
-* Probably don't autocurry. It makes for confusing error messages for noobs. Or at least improve the errors so they point out that you passed the wrong number of args to a function (if the curried interpretations doesn't otherwise make sense).
+* Probably don't autocurry. It makes for confusing error messages for noobs. Or at least improve the errors so they point out that you passed the wrong number of args to a function (if the curried interpretation doesn't otherwise make sense).
 * D has GC but lets you turn it off for sections. Study it. V has ARC (actually avoiding most instances of refcounting) and then GC for cycles. But atm it makes you decide which ref is weak.
+* One of the aesthetic goals is to declutter. Syntax that is "for the machine" or "for the compiler" should be minimized. (This nudges us away from super-low-level applications, but perhaps a Sufficiently Advanced Compiler could keep those avenues open.) Declarations are minimal. GC exists. Exceptions rather than explicit error checking. Even whitespace over braces might be an example of this. I intend that minimizing clutter maximize the amount of brain space a developers can dedicate to their applications.
 
 ## Types
 ### Possibilities
@@ -133,20 +134,31 @@ Right now, "Hello, world" is hard-coded into the compiler in the form of AST exp
 * √ Study what I've written to get an understanding of the LLVM API.
 * √ Add ifs (multiple basic blocks).
 * Vars. A var assigned-to from a function and not declared nonlocal/global/whatever-else-I-add is scoped to that function. There is no block-level scoping. This avoids having to make or read var declarations, read over `let` keywords, or slide `:=` operators around as a function evolves. In short, we borrow Python's assignment heuristic. Upsides: you can move code from an outer function to an inner one without changing it, as long as it only reads variables. (You don't have to add `^` annotations like `print(foo^)` (if `^` meant "look in the enclosing scope").) Writes to a var from outside can be accomplished by declaring the var `nonlocal`. This is better than a special assignment operator because you can do it once and for all rather than changing every writing reference you've copied and pasted from the outer function.
+
     It's worth contrasting var declarations with import statements. The latter are useful while reading code. They tell the reader where deeply imported local symbols are defined, in case they want to go read the code or docs. They shorten callsites if you deeply import. Var declarations don't provide as much information: just "it belongs to this block" and sometimes "it is of this type". We're dispensing with the strictures of the former for ease of expression, and the second we will accomplish some other way, perhaps `someVar:someType = nonObviousReturnValue()`.
+
     Function scoping--or in fact, any scoping in which the introduction of a new var does not introduce a new block--does make it more challenging to detect reads from undefined vars. (I don't want runtime errors for something so common and, because the cause is branches, possibly undetected until a rare branch fires.) The compiler will have to check every branch of every `if` in a function to make sure every one defines all non-pre-existing vars read afterward. Same for loops that could `break` before assigning to a var. If the compiler can't prove we write before read, it throws an error. You can satisfy it by initializing the var before the `if` or loop. Hopefully the compiler will get smarter and smarter, letting us remove more and more such legalistic initializations. But in any case it's a reduction from saying `let` in front of each first write of a var.
+
     A var with the same name as one in an enclosing function or module, if assigned to from the inner function, shadows the outer one.
+
     To implement: for each function, find the vars written to within it. Put those into a set. (This is faster than spidering all over the function anew for each ref.) As we codegen each var ref, look into those sets to figure out what stack frame to (if not already done) add the var to.
+
     We'll put all the `alloca` instructions in the entry block of the function so we can depend on `mem2reg` to convert them to register accesses.
+
     Sum types can be represented by alloca-ing enough space for the largest alternative and also making space (whether as a separate pseudovar or part of a struct that contains the enum and the var value) for the enum value. Make sure it works nicely with nested enumerations, like `foo:(int|Snoo);  Snoo = double|string`.
-    * Complain on the possibility of undefined var reads.
-    * Support other types than int.
+
+    * Complain on the possibility of undefined var reads. Maybe for this it could be good enough just to assert that every read in a CFG node has a write in a dominator or in the same node but before the read. Should be able to do this first pretty easily.
+    * Support other types than int. I don't see any other way to do this than to write an honest-to-goodness constraint solver for type inference. Perhaps it's possible that we wouldn't need one just for inference, but we'd sure need one for type checking. If somebody is inconsistent with types, we need that unification failure to notice the error. Here's a great summary of unification for type inference, even including some OCaml code: https://www.cs.cornell.edu/courses/cs3110/2011sp/Lectures/lec26-type-inference/type-inference.htm.
+* Raise an error if a function returns a different type than declared. (This should be taken care of by the unifier.)
 * GC
 * Loops. All looping constructs can be lowered to an infinite loop plus a break statement. Infinite loops can be lowered to recursion with TCO. Not sure about the breaks.
 * Decide on dispatch. Will it be hard for a human to find where a function's code is?
-* Do non-primitive types, like ML enums, probably with type erasure, which would mean an IR or at least symbol tables to keep track of what types things are.
+* Do non-primitive types, like ML enums. We won't have type erasure on enums because we'll have to be able to distinguish among variants in `match` clauses.
 * We might be able to get away with just recursion for type inference, as long as we explicitly declare function args and return types (at least temporarily): https://mukulrathi.co.uk/create-your-own-programming-language/intro-to-type-checking/
 * Make protos unnecessary (except for externals, I guess).
 * Design the language.
 * Exceptions. Undesirable in a pure language because they can pop out any time unexpectedly. So require you catch them--and in the direct-calling stack frame? That makes them basically inferred option types without exceptions' distinguishing characteristic: multi-frame stack unwinding.
+
     If we have exceptions, the `catch` clauses should probably look like `match` clauses and be able to pattern-match and destructure thrown values. A thrown value can be any old object with a constructor: anything that can be matched against.
+
+    For applications that cannot tolerate exceptions, we can have a `no_except` signifier applied to a function that cues the compiler to throw an error if any exception that could be raised within a function is not caught.
