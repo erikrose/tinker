@@ -26,7 +26,7 @@ Everything is vague and loosely held at the moment. Consider this a sketch.
 * Probably exceptions. I don't see how to do Options without a lot of boilerplate (`.unwrap()` and `?` all over the place in Rust) that makes programs hard to read and just lays a lot of profitless bookkeeping on the user. "Just add question marks until the compiler is happy!" —-In that case, have you really improved anything over just throwing exceptions?
 * Probably don't autocurry. It makes for confusing error messages for noobs. Or at least improve the errors so they point out that you passed the wrong number of args to a function (if the curried interpretation doesn't otherwise make sense).
 * D has GC but lets you turn it off for sections. Study it. V has ARC (actually avoiding most instances of refcounting) and then GC for cycles. But atm it makes you decide which ref is weak.
-* One of the aesthetic goals is to declutter. Syntax that is "for the machine" or "for the compiler" should be minimized. (This nudges us away from super-low-level applications, but perhaps a Sufficiently Advanced Compiler could keep those avenues open.) Declarations are minimal. GC exists. Exceptions rather than explicit error checking. Even whitespace over braces might be an example of this. I intend that minimizing clutter maximize the amount of brain space a developers can dedicate to their applications.
+* One of the aesthetic goals is to declutter. Syntax that is "for the machine" or "for the compiler" should be minimized. (This nudges us away from super-low-level applications, but perhaps a Sufficiently Advanced Compiler or special-purpose notation could keep those avenues open.) Declarations are minimal. GC exists. Exceptions rather than explicit error checking. Even whitespace over braces might be an example of this. The intention of minimizing clutter is to maximize the amount of mental space a developers can dedicate to their applications. Clutter should *not* be reduced past the point where it makes code harder to read.
 
 ## Types
 ### Possibilities
@@ -122,7 +122,15 @@ fun foo
 
 ## Status
 
-Right now, "Hello, world" is hard-coded into the compiler in the form of AST expressions. There's no parser yet, because I don't know what I want the syntax to look like. To compile and run "Hello, world", run `make run`. You'll need OCaml, the llvm opam package, and the LLVM headers installed.
+Right now, "Hello, world" is hard-coded into the compiler in the form of AST expressions. There's no parser yet, because I don't know what I want the syntax to look like. To install dependencies...
+
+```
+opam install llvm ounit2
+```
+
+Also install the LLVM headers.
+
+To compile and run "Hello, world", run `make run`.
 
 ## To do
 * √ Be able to declare externals so we don't need any C.
@@ -147,7 +155,9 @@ Right now, "Hello, world" is hard-coded into the compiler in the form of AST exp
 
     Sum types can be represented by alloca-ing enough space for the largest alternative and also making space (whether as a separate pseudovar or part of a struct that contains the enum and the var value) for the enum value. Make sure it works nicely with nested enumerations, like `foo:(int|Snoo);  Snoo = double|string`.
 
-    * Complain on the possibility of undefined var reads. Maybe for this it could be good enough just to assert that every read in a CFG node has a write in a dominator or in the same node but before the read. Should be able to do this first pretty easily.
+    * Complain on the possibility of undefined var reads. Maybe for this it could be good enough just to assert that every read in a CFG node has a write in a dominator or in the same node but before the read. (With Lengauer-Tarjan, we can find dominators in O(m log n).) Or assert that every read hits a write via every path back to the entry block. Definitely write this against the CFG, lest we get some control structure later that has a nonobvious, nonlexical relationship to control flow. Or would it be possible and simpler to have a big match clause where each syntactical construct makes sure a given var is found in each of its (potential) branches? We could cache for speed.
+
+        When making example CFGs for trying out analysis ideas, using `rand()` calls as the condition in `if` expressions comes in handy: it lets you pick best-case and worst-case paths at your discretion without painstakingly constructing code that does whichever you were looking for. Sometimes it lets you halve the amount of code just by choosing different branches each time around a loop.
     * Support other types than int. I don't see any other way to do this than to write an honest-to-goodness constraint solver for type inference. Perhaps it's possible that we wouldn't need one just for inference, but we'd sure need one for type checking. If somebody is inconsistent with types, we need that unification failure to notice the error. Here's a great summary of unification for type inference, even including some OCaml code: https://www.cs.cornell.edu/courses/cs3110/2011sp/Lectures/lec26-type-inference/type-inference.htm.
 * Raise an error if a function returns a different type than declared. (This should be taken care of by the unifier.)
 * GC

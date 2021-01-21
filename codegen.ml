@@ -156,9 +156,16 @@ let codegen_func func context the_module builder =
     (* Create a new basic block, and point the builder to the end of it: *)
     let bb = append_block context "entry" the_function in
     position_at_end bb builder;
-    
+
+    Ast.assert_no_unwritten_reads_in body;
+
     (* Add allocas for all local vars. They have to be in the entry block, or
      * mem2reg won't work. *)
+
+    (* Gen the alloca, and add an entry to the symbol table: *)
+    let add_local_var t var_name =
+      let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
+      Hashtbl.replace vars var_name (stack_slot, t) in
 
     (* Return a List of the assigned var names in an expression. *)
     let rec assignments_in node =
@@ -175,11 +182,6 @@ let codegen_func func context the_module builder =
                                                      assignments_in else_]
         | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
     in
-    (* Gen the alloca, and add an entry to the symbol table: *)
-    let add_local_var t var_name =
-      let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
-      Hashtbl.replace vars var_name (stack_slot, t) in
-
     (* For the moment, we support assigning only to ints, just so we can get
      * vars proven out without having to write type inference first. *)
     (* TODO: Add a given var to the table only once. *)
