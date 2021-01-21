@@ -162,10 +162,13 @@ let codegen_func func context the_module builder =
     (* Add allocas for all local vars. They have to be in the entry block, or
      * mem2reg won't work. *)
 
-    (* Gen the alloca, and add an entry to the symbol table: *)
+    (** If the given var isn't already allocated, gen the alloca, and add an
+        entry to the symbol table: *)
     let add_local_var t var_name =
-      let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
-      Hashtbl.replace vars var_name (stack_slot, t) in
+      if not (Hashtbl.mem vars var_name) then
+        let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
+        Hashtbl.replace vars var_name (stack_slot, t)
+      else () in
 
     (* Return a List of the assigned var names in an expression. *)
     let rec assignments_in node =
@@ -184,7 +187,6 @@ let codegen_func func context the_module builder =
     in
     (* For the moment, we support assigning only to ints, just so we can get
      * vars proven out without having to write type inference first. *)
-    (* TODO: Add a given var to the table only once. *)
     List.iter (add_local_var IntType) (assignments_in body);
 
     (* Codegen body: *)
