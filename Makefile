@@ -25,6 +25,12 @@ compile.native: *.ml
 	ocamlbuild -pkgs llvm,llvm.analysis compile.native
 
 clean:
-	rm -rf _build compile.native build a.out
+	rm -rf _build compile.native build a.out test.native
 
-.PHONY: all clean run build
+test: _build/test.native
+	./test.native -ci true
+
+_build/test.native: *.ml
+	ocamlbuild -pkgs llvm,llvm.analysis,ounit2 test.native
+
+.PHONY: all clean run build test

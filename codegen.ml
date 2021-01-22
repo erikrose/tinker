@@ -3,6 +3,11 @@ open Llvm_analysis
 
 exception Error of string
 
+(** For the function currently being generated, a map of var name to memory
+    location and type. This will become a stack of hash tables once we support
+    nested functions. *)
+let vars:(string, (llvalue * Ast.tipe)) Hashtbl.t = Hashtbl.create ~random:true 20
+
 let rec codegen_expr context the_module builder body =
   match body with
   | Ast.Double n -> const_float (double_type context) n
@@ -17,10 +22,10 @@ let rec codegen_expr context the_module builder body =
     let params = params callee in
 
     (* If argument mismatch error: *)
-    if Array.length params == Array.length args then () else
+    if Array.length params <> List.length args then
       raise (Error "incorrect # arguments passed");
-    let genned_args = Array.map (codegen_expr context the_module builder) args in
-    build_call callee genned_args "" builder (* TODO: Stop naming this. Won't it collide with other calls in the same bb? *)
+    let genned_args = List.map (codegen_expr context the_module builder) args in
+    build_call callee (Array.of_list genned_args) "" builder
   | Ast.String str ->
     build_global_stringptr str "" builder
   | Ast.Block exprs ->
@@ -30,31 +35,42 @@ let rec codegen_expr context the_module builder body =
     in
     (* This null value will do for now, but it might not be the final one we want: *)
     let null_value = const_null (void_type context) in
-    Array.fold_left last_expr_value null_value exprs
+    List.fold_left last_expr_value null_value exprs
+  | Ast.Assignment (name, value) ->
+    (* Codegen the value expr, then store it at the address of `name` as given
+       by the hash table. The hash table also gives the type so we know how
+       many bytes to copy. *)
+    let genned_value = codegen_expr context the_module builder value in
+    let (stack_slot, _) = Hashtbl.find vars name in
+    (* Store and return the assigned value: *)
+    ignore (build_store genned_value stack_slot builder);
+    genned_value
+  | Ast.Var name ->
+    let (stack_slot, _) = Hashtbl.find vars name in
+    build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
   | Ast.If (condition, then_, else_) ->
     (* Generate something along these lines. It's very hard to understand the
-     * if-generation code without this as a reference.
-     *
-     * entry:
-     *   %ifcond = <condition_value>
-     *   br i1 %ifcond, label %then, label %else
-     *
-     * then:                                             ; preds = %entry
-     *   <whatever code is in the then block>
-     *   br label %ifcont
-     *
-     * else:                                             ; preds = %entry
-     *   <whatever code is in the else block>
-     *   br label %ifcont
-     *
-     * ifcont:                                           ; preds = %else, %then
-     *   %iftmp = phi i8* [ <then_value>, %then ], [ <else_value>, %else ]
-     *   %1 = call i64 @puts(i8* %iftmp)
-     *   ret i64 %1
-     *)
+       if-generation code without this as a reference.
+
+       entry:
+         %ifcond = <condition_value>
+         br i1 %ifcond, label %then, label %else
+
+       then:                                             ; preds = %entry
+         <whatever code is in the then block>
+         br label %ifcont
+
+       else:                                             ; preds = %entry
+         <whatever code is in the else block>
+         br label %ifcont
+
+       ifcont:                                           ; preds = %else, %then
+         %iftmp = phi i8* [ <then_value>, %then ], [ <else_value>, %else ]
+         %1 = call i64 @puts(i8* %iftmp)
+         ret i64 %1 *)
 
     let condition_value = codegen_expr context the_module builder condition in
-    let int_zero = const_null (i64_type context) in (* TODO: Support taking other types of condition than int. *)
+    let int_zero = const_null (i64_type context) in
     let comparison = build_icmp Icmp.Ne condition_value int_zero "ifcond" builder in
 
     (* Save old BB, and start a new one for the "then" expr: *)
@@ -62,15 +78,14 @@ let rec codegen_expr context the_module builder body =
     let the_function = block_parent start_bb in
 
     (** Create a bb for a "then" or "else" branch of an if.
-     *
-     * Create a new bb, codegen the given expression as its contents and value,
-     * and return the bb to branch to and the one (possibly different) to phi
-     * from. (Codegen of the expr can change the current block.) Note that this
-     * function changes the builder's position.
-     *
-     * @param name A name to use as the label of the block, just for human
-     *   comprehensibility
-     *)
+
+        Create a new bb, codegen the given expression as its contents and
+        value, and return the bb to branch to and the one (possibly different)
+        to phi from. (Codegen of the expr can change the current block.) Note
+        that this function changes the builder's position.
+
+        @param name A name to use as the label of the block, just for human
+          comprehensibility *)
     let new_bb_with_expr name contents =
       let bb_for_branch = append_block context name the_function in
       position_at_end bb_for_branch builder;
@@ -96,7 +111,7 @@ let rec codegen_expr context the_module builder body =
     ignore (build_cond_br comparison then_bb else_bb builder);
 
     (* Set an unconditional branch at the end of the "then" block and the
-     * "else" block to the "merge" block: *)
+       "else" block to the "merge" block: *)
     position_at_end new_then_bb builder; ignore (build_br merge_bb builder);
     position_at_end new_else_bb builder; ignore (build_br merge_bb builder);
 
@@ -105,7 +120,7 @@ let rec codegen_expr context the_module builder body =
 
     phi
 
-(* Return the LLVM type corresponding to one of our AST "tipes". *)
+(** Return the LLVM type corresponding to one of our AST "tipes". *)
 let llvm_type ast_type context =
   match ast_type with
   | Ast.DoubleType -> double_type context
@@ -133,6 +148,38 @@ let codegen_func func context the_module builder =
     let bb = append_block context "entry" the_function in
     position_at_end bb builder;
 
+    Ast.assert_no_unwritten_reads_in body;
+
+    (* Add allocas for all local vars. They have to be in the entry block, or
+       mem2reg won't work. *)
+
+    (** If the given var isn't already allocated, gen the alloca, and add an
+        entry to the symbol table: *)
+    let add_local_var t var_name =
+      if not (Hashtbl.mem vars var_name) then
+        let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
+        Hashtbl.replace vars var_name (stack_slot, t)
+      in
+
+    (** Return a List of the assigned var names in an expression. *)
+    let rec assignments_in node =
+      (* TODO: Don't concretize the returned list. *)
+      match node with
+        | Ast.Double _
+        | Ast.Int _
+        | Ast.String _
+        | Ast.Var _ -> []
+        | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
+        | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
+        | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
+                                                     assignments_in then_;
+                                                     assignments_in else_]
+        | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
+    in
+    (* For the moment, we support assigning only to ints, just so we can get
+       vars proven out without having to write type inference first. *)
+    List.iter (add_local_var IntType) (assignments_in body);
+
     (* Codegen body: *)
     let ret_val = codegen_expr context the_module builder body in
 
@@ -142,4 +189,5 @@ let codegen_func func context the_module builder =
     (* Validate the generated code, checking for consistency: *)
     assert_valid_function the_function;
 
+    Hashtbl.reset vars;
     the_function
