@@ -51,7 +51,8 @@ let rec codegen_expr context the_module builder body =
     let genned_value = codegen_expr context the_module builder value in
     let (stack_slot, _) = Hashtbl.find vars name in
     (* Store and return the assigned value: *)
-    build_store genned_value stack_slot builder
+    ignore (build_store genned_value stack_slot builder);
+    genned_value
   | Ast.Var name ->
     let (stack_slot, _) = Hashtbl.find vars name in
     build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
