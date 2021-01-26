@@ -5,17 +5,18 @@ let main () =
   let the_module = create_module context "my singleton module" in
   let builder = builder context in
 
-  let puts_proto = Ast.Prototype ("puts", [| StringPtrType |], IntType) in
-  ignore (Codegen.codegen_proto puts_proto context the_module);
+  let puts = Ast.Function ("puts", [| StringPtrType |], IntType, Ast.External) in
+  ignore (Codegen.codegen_expr context the_module builder puts);
 
-  let main_proto = Ast.Prototype ("main", [| |], IntType) in
-  let main = Ast.Function (main_proto,
-                           Ast.Block([
+  let main = Ast.Function ("main",
+                           [| |],
+                           IntType,
+                           Ast.Body (Ast.Block ([
                                         Ast.Call("puts", [ String ("howdy") ]);
                                         Ast.Assignment("x", Int(1));
                                         Ast.Call("puts", [ Ast.If(Ast.Var("x"), String("true"), String("false")) ])
-                                     ])) in
-  ignore (Codegen.codegen_func main context the_module builder);
+                                     ]))) in
+  ignore (Codegen.codegen_expr context the_module builder main);
 
   dump_module the_module
 

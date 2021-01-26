@@ -1,4 +1,12 @@
-(* Base type for all expression nodes *)
+type tipe =
+  | DoubleType
+  | IntType
+  | StringType of int (** length *)
+  | StringPtrType
+  | VoidType
+  | FunctionType of tipe list * tipe (** args, return *) 
+
+(** Base type for all expression nodes *)
 type expr =
   | Double of float
   | Int of int (** semantic: 64-bit int *)
@@ -10,25 +18,22 @@ type expr =
       because it might also occur in global namespace. Besides, it gives us the
       flexibility to become block-scoped at some point. *)
   | Block of expr list
-  | If of expr * expr * expr (* condition, then, else *)
-  | Var of string (* var read *)
-  | Assignment of string * expr (* var write: name, value *)
-  (* TODO: Why aren't functions and protos expressions? It would be nice for
-     them to be. Then everything could have a type. *)
+  | If of expr * expr * expr (** condition, then, else *)
+  | Var of string (** var read *)
+  | Assignment of string * expr (** var write: name, value *)
 
-type tipe =
-  | DoubleType
-  | IntType
-  | StringType of int (* length *)
-  | StringPtrType
-  | VoidType
+  (** A function, either internal linkage (with body) or external (without).
+      We'll keep declaring types for external functions, even under type
+      inference. I don't want to infer signatures from callsites and get it
+      wrong, causing the callee to receive garbage and crash. *)
+  | Function of string * tipe array * tipe * function_definition (* name, args, return, body *)
+  (* Syntax should be something like `fun (a, b) -> external`, where "external"
+     is a lexer artifact like "pass" in Python. *)
+  (* TODO: We don't strictly need to name functions; we could just assign them to vars (if we had top-level vars). The only problem would be how to know what to call them if we tried to call them from C. It might be tricky to ascertain that statically; what if we had a single function assigned to 2 separate vars? Stick a func ptr in one? (Is that what's in the other anyway?) Introduce some `export` syntax? *)
+and function_definition =
+  | Body of expr
+  | External (** It's found in another module. *)
 
-(** The "prototype" for a function, which captures its name, argument types, and
-    return type *)
-type proto = Prototype of string * tipe array * tipe
-
-(** A function that has an implementation in this module. *)
-type func = Function of proto * expr
 
 module String_set = Set.Make (String)
 

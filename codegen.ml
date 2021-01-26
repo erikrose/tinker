@@ -8,8 +8,33 @@ exception Error of string
     nested functions. *)
 let vars:(string, (llvalue * Ast.tipe)) Hashtbl.t = Hashtbl.create ~random:true 20
 
-let rec codegen_expr context the_module builder body =
-  match body with
+(** Return the LLVM type corresponding to one of our AST "tipes". *)
+let llvm_type ast_type context =
+  match ast_type with
+  | Ast.DoubleType -> double_type context
+  | IntType -> i64_type context (* TODO: make portable *)
+  | StringType length -> array_type (i8_type context) length
+  | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
+  | VoidType -> void_type context
+(*  | FunctionType ->  *)
+
+(** Return a List of the assigned var names in an expression. *)
+let rec assignments_in node =
+  (* TODO: Don't concretize the returned list. *)
+  match node with
+    | Ast.Double _
+    | Ast.Int _
+    | Ast.String _
+    | Ast.Var _ -> []
+    | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
+    | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
+    | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
+                                                 assignments_in then_;
+                                                 assignments_in else_]
+    | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
+
+let rec codegen_expr context the_module builder exp =
+  match exp with
   | Ast.Double n -> const_float (double_type context) n
   | Ast.Int n -> const_int (i64_type context) n
   | Ast.Call (callee, args) ->
@@ -119,74 +144,47 @@ let rec codegen_expr context the_module builder body =
     position_at_end merge_bb builder;
 
     phi
+  | Ast.Function (name, arg_types, ret_type, definition) ->
+    let codegen_declaration name arg_types ret_type =
+      (* Make the function type: double(double, double) etc. *)
+      let llvm_arg_types = Array.init (Array.length arg_types) (fun i -> llvm_type arg_types.(i) context) in
+      (* Return and arg types: *)
+      let signature = function_type (llvm_type ret_type context) llvm_arg_types in
+      declare_function name signature the_module
+      (* TODO: Error if a function gets redeclared. *)
+    in
+    let the_function = codegen_declaration name arg_types ret_type in
+    match definition with
+    | Body body ->
+      (* Create a new basic block, and point the builder to the end of it: *)
+      let bb = append_block context "entry" the_function in
+      position_at_end bb builder;
 
-(** Return the LLVM type corresponding to one of our AST "tipes". *)
-let llvm_type ast_type context =
-  match ast_type with
-  | Ast.DoubleType -> double_type context
-  | IntType -> i64_type context (* TODO: make portable *)
-  | StringType length -> array_type (i8_type context) length
-  | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
-  | VoidType -> void_type context
+      Ast.assert_no_unwritten_reads_in body;
 
-(** Return a List of the assigned var names in an expression. *)
-let rec assignments_in node =
-  (* TODO: Don't concretize the returned list. *)
-  match node with
-    | Ast.Double _
-    | Ast.Int _
-    | Ast.String _
-    | Ast.Var _ -> []
-    | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
-    | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
-    | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
-                                                 assignments_in then_;
-                                                 assignments_in else_]
-    | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
+      (* Add allocas for all local vars. They have to be in the entry block, or
+         mem2reg won't work. *)
 
-let codegen_proto proto context the_module =
-  match proto with
-  | Ast.Prototype (name, arg_types, ret_type) ->
-    (* Make the function type: double(double,double) etc. *)
-    let llvm_arg_types = Array.init (Array.length arg_types) (fun i -> llvm_type arg_types.(i) context) in
-    (* Return and arg types: *)
-    let signature = function_type (llvm_type ret_type context) llvm_arg_types in
-    declare_function name signature the_module
-    (* TODO: Error if a function gets redeclared. *)
+      (** If the given var isn't already allocated, gen the alloca, and add an
+          entry to the symbol table: *)
+      let add_local_var t var_name =
+        if not (Hashtbl.mem vars var_name) then
+          let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
+          Hashtbl.replace vars var_name (stack_slot, t)
+        in
+      (* For the moment, we support assigning only to ints, just so we can get
+         vars proven out without having to write type inference first. *)
+      List.iter (add_local_var IntType) (assignments_in body);
 
-let codegen_func func context the_module builder =
-  match func with
-  | Ast.Function (proto, body) ->
-    let the_function = codegen_proto proto context the_module in
+      (* Codegen body: *)
+      let ret_val = codegen_expr context the_module builder body in
 
-    (* Create a new basic block, and point the builder to the end of it: *)
-    let bb = append_block context "entry" the_function in
-    position_at_end bb builder;
+      (* Return the computed value of the body expression: *)
+      ignore (build_ret ret_val builder);
 
-    Ast.assert_no_unwritten_reads_in body;
+      (* Validate the generated code, checking for consistency: *)
+      assert_valid_function the_function;
 
-    (* Add allocas for all local vars. They have to be in the entry block, or
-       mem2reg won't work. *)
-
-    (** If the given var isn't already allocated, gen the alloca, and add an
-        entry to the symbol table: *)
-    let add_local_var t var_name =
-      if not (Hashtbl.mem vars var_name) then
-        let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
-        Hashtbl.replace vars var_name (stack_slot, t)
-      in
-    (* For the moment, we support assigning only to ints, just so we can get
-       vars proven out without having to write type inference first. *)
-    List.iter (add_local_var IntType) (assignments_in body);
-
-    (* Codegen body: *)
-    let ret_val = codegen_expr context the_module builder body in
-
-    (* Return the computed value of the body expression: *)
-    ignore (build_ret ret_val builder);
-
-    (* Validate the generated code, checking for consistency: *)
-    assert_valid_function the_function;
-
-    Hashtbl.reset vars;
-    the_function
+      Hashtbl.reset vars;
+      the_function
+    | External -> the_function
