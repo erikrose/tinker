@@ -129,6 +129,21 @@ let llvm_type ast_type context =
   | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
   | VoidType -> void_type context
 
+(** Return a List of the assigned var names in an expression. *)
+let rec assignments_in node =
+  (* TODO: Don't concretize the returned list. *)
+  match node with
+    | Ast.Double _
+    | Ast.Int _
+    | Ast.String _
+    | Ast.Var _ -> []
+    | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
+    | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
+    | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
+                                                 assignments_in then_;
+                                                 assignments_in else_]
+    | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
+
 let codegen_proto proto context the_module =
   match proto with
   | Ast.Prototype (name, arg_types, ret_type) ->
@@ -160,22 +175,6 @@ let codegen_func func context the_module builder =
         let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
         Hashtbl.replace vars var_name (stack_slot, t)
       in
-
-    (** Return a List of the assigned var names in an expression. *)
-    let rec assignments_in node =
-      (* TODO: Don't concretize the returned list. *)
-      match node with
-        | Ast.Double _
-        | Ast.Int _
-        | Ast.String _
-        | Ast.Var _ -> []
-        | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
-        | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
-        | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
-                                                     assignments_in then_;
-                                                     assignments_in else_]
-        | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
-    in
     (* For the moment, we support assigning only to ints, just so we can get
        vars proven out without having to write type inference first. *)
     List.iter (add_local_var IntType) (assignments_in body);
