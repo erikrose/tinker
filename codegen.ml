@@ -155,7 +155,7 @@ let rec codegen_expr context the_module builder exp =
     in
     let the_function = codegen_declaration name arg_types ret_type in
     match definition with
-    | Body body ->
+    | Internal body ->
       (* Create a new basic block, and point the builder to the end of it: *)
       let bb = append_block context "entry" the_function in
       position_at_end bb builder;

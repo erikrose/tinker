@@ -11,7 +11,7 @@ let assignment_values test_ctxt =
   let main = Ast.Function ("main",
                            [| |],
                            IntType,
-                           Ast.Body (Ast.Assignment("x", Int(1)))) in
+                           Ast.Internal (Ast.Assignment("x", Int(1)))) in
   ignore (Codegen.codegen_expr context the_module builder main)
 
 let undefined_if_branches test_ctxt =
@@ -23,10 +23,10 @@ let undefined_if_branches test_ctxt =
   assert_raises (Exc.Undefined_var "a") (fun () -> Ast.assert_no_unwritten_reads_in body)
 
 let suite =
-"suite">:::
+"suite" >:::
   [
-    "Assignments must return their value.">:: assignment_values;
-    "When the branches of an `if` read an undefined var, raise an error.">:: undefined_if_branches
+    "Assignments must return their value." >:: assignment_values;
+    "When the branches of an `if` read an undefined var, raise an error." >:: undefined_if_branches;
   ]
 
 let () =

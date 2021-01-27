@@ -11,7 +11,7 @@ let main () =
   let main = Ast.Function ("main",
                            [| |],
                            IntType,
-                           Ast.Body (Ast.Block ([
+                           Ast.Internal (Ast.Block ([
                                         Ast.Call("puts", [ String ("howdy") ]);
                                         Ast.Assignment("x", Int(1));
                                         Ast.Call("puts", [ Ast.If(Ast.Var("x"), String("true"), String("false")) ])

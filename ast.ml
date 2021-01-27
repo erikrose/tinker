@@ -29,9 +29,9 @@ type expr =
   | Function of string * tipe array * tipe * function_definition (* name, args, return, body *)
   (* Syntax should be something like `fun (a, b) -> external`, where "external"
      is a lexer artifact like "pass" in Python. *)
-  (* TODO: We don't strictly need to name functions; we could just assign them to vars (if we had top-level vars). The only problem would be how to know what to call them if we tried to call them from C. It might be tricky to ascertain that statically; what if we had a single function assigned to 2 separate vars? Stick a func ptr in one? (Is that what's in the other anyway?) Introduce some `export` syntax? *)
+  (* TODO: We don't strictly need to name functions; we could just assign them to vars (if we had top-level vars). The only problem would be how to know what to call them if we tried to call them from C. It might be tricky to ascertain that statically; what if we had a single function assigned to 2 separate vars? Stick a func ptr in one? (How do we make sure it gets dereffed?) Introduce some `export` syntax? *)
 and function_definition =
-  | Body of expr
+  | Internal of expr (** function body *)
   | External (** It's found in another module. *)
 
 
