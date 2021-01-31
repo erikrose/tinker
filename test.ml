@@ -1,6 +1,16 @@
 open Llvm
 open OUnit2
 
+let main_function expr =
+  Ast.Function (
+    "main",
+    [| |],
+    IntType,
+    Ast.Internal (
+      expr
+    )
+   )
+
 (** Repro a bug wherein assignment didn't return a value, leading LLVM function
     validation to fail. *)
 let assignment_values test_ctxt =
@@ -8,10 +18,7 @@ let assignment_values test_ctxt =
   let the_module = create_module context "my singleton module" in
   let builder = builder context in
 
-  let main = Ast.Function ("main",
-                           [| |],
-                           IntType,
-                           Ast.Internal (Ast.Assignment("x", Int(1)))) in
+  let main = main_function (Ast.Assignment ("x", Int(1))) in
   ignore (Codegen.codegen_expr context the_module builder main)
 
 let undefined_if_branches test_ctxt =
@@ -27,18 +34,13 @@ let inner_functions_raise_exception test_ctxt =
   let the_module = create_module context "my singleton module" in
   let builder = builder context in
 
-  let main = Ast.Function (
-              "main",
-              [| |],
-              IntType,
-              Ast.Internal (
-                Ast.Function (
-                  "sub",
-                  [| |],
-                  VoidType,
-                  Ast.Internal (
-                    Ast.Block []
-                  )
+  let main = main_function (
+              Ast.Function (
+                "sub",
+                [| |],
+                VoidType,
+                Ast.Internal (
+                  Ast.Block []
                 )
               )
              ) in
