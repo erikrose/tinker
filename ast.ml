@@ -38,9 +38,10 @@ and function_definition =
 module String_set = Set.Make (String)
 
 (** Raise an exception if there is a var that could be read before being
-    written in the given expression.
+    written in the given expression. We do not recurse into further Functions
+    because those are different scopes.
     @raise exc.UndefinedVar if we encounter a var read before it's written *)
-let assert_no_unwritten_reads_in exp =
+let assert_no_unwritten_reads_in_scope exp =
   (** Return the set of vars we can prove has been written in the expression.
       @param written The set of variables we can prove have been written to
         already
@@ -54,7 +55,8 @@ let assert_no_unwritten_reads_in exp =
     match exp with
     | Double _
     | Int _
-    | String _ -> String_set.empty
+    | String _
+    | Function _ -> String_set.empty
     | If (if_, then_, else_) ->
       let written_in_if = proven_written if_ written in
       let written_in_then = proven_written then_ written_in_if in

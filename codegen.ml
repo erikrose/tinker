@@ -8,23 +8,33 @@ exception Error of string
     nested functions. *)
 let vars:(string, (llvalue * Ast.tipe)) Hashtbl.t = Hashtbl.create ~random:true 20
 
+(** Flag saying whether a function is currently being codegenned *)
+let is_generating_function:bool ref = ref false
+
 (** Return the LLVM type corresponding to one of our AST "tipes". *)
-let llvm_type ast_type context =
-  match ast_type with
+let rec llvm_type context ast_tipe =
+  match ast_tipe with
   | Ast.DoubleType -> double_type context
   | IntType -> i64_type context (* TODO: make portable *)
   | StringType length -> array_type (i8_type context) length
   | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
   | VoidType -> void_type context
-(*  | FunctionType ->  *)
+  | FunctionType (arg_tipes, ret_tipe) ->
+    let arg_llvm_types = List.map (llvm_type context) arg_tipes in
+    pointer_type (function_type (llvm_type context ret_tipe) (Array.of_list arg_llvm_types))
 
-(** Return a List of the assigned var names in an expression. *)
+(** Return a List of the assigned var names in the scope of an expression.
+
+    If the expression contains a function definition, we don't recurse into
+    that; that would be a new scope, so the assignments therein would belong to
+    it. *)
 let rec assignments_in node =
   (* TODO: Don't concretize the returned list. *)
   match node with
     | Ast.Double _
     | Ast.Int _
     | Ast.String _
+    | Ast.Function _ (* TODO: Figure out what the scope of function names is and how functions are to be referenced. Perhaps we should count a declared inner function as a local var and add it to the local scope. *)
     | Ast.Var _ -> []
     | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
     | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
@@ -144,23 +154,29 @@ let rec codegen_expr context the_module builder exp =
     position_at_end merge_bb builder;
 
     phi
-  | Ast.Function (name, arg_types, ret_type, definition) ->
-    let codegen_declaration name arg_types ret_type =
+  | Ast.Function (name, arg_tipes, ret_tipe, definition) ->
+    if !is_generating_function then
+      raise (Error "Inner functions are not allowed yet.")
+    else
+      is_generating_function := true;
+    let codegen_declaration name arg_tipes ret_tipe =
       (* Make the function type: double(double, double) etc. *)
-      let llvm_arg_types = Array.init (Array.length arg_types) (fun i -> llvm_type arg_types.(i) context) in
+      let llvm_arg_types = Array.init (Array.length arg_tipes) (fun i -> llvm_type context arg_tipes.(i)) in
       (* Return and arg types: *)
-      let signature = function_type (llvm_type ret_type context) llvm_arg_types in
+      let signature = function_type (llvm_type context ret_tipe) llvm_arg_types in
       declare_function name signature the_module
       (* TODO: Error if a function gets redeclared. *)
     in
-    let the_function = codegen_declaration name arg_types ret_type in
-    match definition with
+    let the_function = codegen_declaration name arg_tipes ret_tipe in
+    let () = match definition with
     | Internal body ->
       (* Create a new basic block, and point the builder to the end of it: *)
       let bb = append_block context "entry" the_function in
       position_at_end bb builder;
 
-      Ast.assert_no_unwritten_reads_in body;
+      Ast.assert_no_unwritten_reads_in_scope body;
+
+      (* What happens when we encounter an inner function? Don't screw up. Start a new Hashtbl (or go with a COW tree). Watch your block position. I guess generate all funcs as globals with munged names. LLVM IR does expect func ptrs as params to all call instructions, so we could just pass func ptrs around. *)
 
       (* Add allocas for all local vars. They have to be in the entry block, or
          mem2reg won't work. *)
@@ -169,7 +185,7 @@ let rec codegen_expr context the_module builder exp =
           entry to the symbol table: *)
       let add_local_var t var_name =
         if not (Hashtbl.mem vars var_name) then
-          let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
+          let stack_slot = build_alloca (llvm_type context IntType) var_name builder in
           Hashtbl.replace vars var_name (stack_slot, t)
         in
       (* For the moment, we support assigning only to ints, just so we can get
@@ -185,6 +201,8 @@ let rec codegen_expr context the_module builder exp =
       (* Validate the generated code, checking for consistency: *)
       assert_valid_function the_function;
 
-      Hashtbl.reset vars;
-      the_function
-    | External -> the_function
+      Hashtbl.reset vars
+    | External -> ()
+    in
+    is_generating_function := false;
+    the_function
