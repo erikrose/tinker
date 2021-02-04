@@ -31,6 +31,6 @@ test: _build/test.native
 	./test.native -ci true
 
 _build/test.native: *.ml
-	ocamlbuild -pkgs llvm,llvm.analysis,ounit2 test.native
+	ocamlbuild -pkgs ctypes,llvm,llvm.analysis,llvm.executionengine,ounit2 test.native
 
 .PHONY: all clean run build test

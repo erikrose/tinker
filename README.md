@@ -126,7 +126,7 @@ fun foo
 Right now, "Hello, world" is hard-coded into the compiler in the form of AST expressions. There's no parser yet, because I don't know what I want the syntax to look like. To install dependencies...
 
 ```
-opam install llvm ounit2
+opam install ctypes-foreign llvm ounit2
 ```
 
 Also install the LLVM headers.
