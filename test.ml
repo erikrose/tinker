@@ -11,11 +11,17 @@ let main_function exp =
     )
    )
 
-let run exp =
+(** Codegen an expression into a new module, and return the module. *)
+let compile exp =
   let context = global_context () in
   let the_module = create_module context "my singleton module" in
   let builder = builder context in
   ignore (Codegen.codegen_expr context the_module builder exp);
+  the_module
+
+(** Run the no-args function called "main" from the given module. Return its
+    int result. *)
+let run_main the_module =
   ignore (Llvm_executionengine.initialize ()); (* I don't think we care if this fails (returns false), because I suppose it then falls back to the interpreter, which is enough for test purposes. *)
   let engine = Llvm_executionengine.create the_module in
   (* This has the side effect of generating the machine code, after which no
@@ -62,7 +68,7 @@ let inner_functions_raise_exception test_ctxt =
                 (fun () -> Codegen.codegen_expr context the_module builder main)
 
 let jit_works_for_tests test_ctxt =
-  let result = run (main_function (Ast.Int 33)) in
+  let result = run_main (compile (main_function (Ast.Int 33))) in
   assert_equal result 33
 
 let global_functions_are_first_class test_ctxt =
@@ -93,12 +99,7 @@ let global_functions_are_first_class test_ctxt =
     ) in
   ignore (Codegen.codegen_expr context the_module builder main_func);
 
-  (* Set up JIT and run it: *)
-  ignore (Llvm_executionengine.initialize ());
-  let engine = Llvm_executionengine.create the_module in
-  let main = Llvm_executionengine.get_function_address "main" (Foreign.funptr (Ctypes.(@->) Ctypes.void (Ctypes.returning Ctypes.int))) engine in
-  let result:int = main () in
-  Llvm_executionengine.dispose engine;
+  let result = run_main the_module in
   assert_equal result 44
 
 let suite =
