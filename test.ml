@@ -104,12 +104,10 @@ let global_functions_are_first_class test_ctxt =
 let suite =
 "suite" >:::
   [
-(*
     "Assignments must return their value." >:: assignments_return_values;
     "When the branches of an `if` read an undefined var, raise an error." >:: undefined_reads_in_if_branches_not_allowed;
     "Inner functions are disallowed for now." >:: inner_functions_raise_exception;
     "JITting test harness works" >:: jit_works_for_tests;
-*)
     "Global functions are first-class." >:: global_functions_are_first_class;
   ]
 

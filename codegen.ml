@@ -158,7 +158,10 @@ let rec codegen_expr context the_module builder exp =
     phi
   | Ast.Function (name, arg_tipes, ret_tipe, definition) ->
     if !is_generating_function then
-      raise (Error "Inner functions are not allowed yet.")
+      begin
+        is_generating_function := false; (* so future test-harness calls don't get a stale value *)
+        raise (Error "Inner functions are not allowed yet.")
+      end
     else
       is_generating_function := true;
     let codegen_declaration name arg_tipes ret_tipe =
