@@ -22,11 +22,8 @@ let main () =
           Ast.Assignment ("first_class_other_func",
                           Ast.Var "other",
                           Ast.FunctionType ([], IntType));
-          Ast.Int 6
-          (*
-Ast.Call (Ast.Var "first_class_other_func",
+          Ast.Call (Ast.Var "first_class_other_func",
                     [])
-*)
         ]
       )
     ) in

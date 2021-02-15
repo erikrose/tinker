@@ -11,7 +11,7 @@ type expr =
   | Double of float
   | Int of int (** semantic: 64-bit int *)
   | String of string
-  | Call of string * expr list (** name, args *)
+  | Call of expr * expr list (** function expr, args *)
 
   (** A block is a sequence of expressions whose value is that of the last
       expression evaluated. This exists as a separate idea from functions

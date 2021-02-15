@@ -86,15 +86,20 @@ let global_functions_are_first_class test_ctxt =
           Ast.Assignment ("first_class_other_func",
                           Ast.Var "other",
                           Ast.FunctionType ([], Ast.IntType));
-          Ast.Int 6
-(*
           Ast.Call (Ast.Var "first_class_other_func",
                     [])
-*)
         ]
       )
     ) in
-  ignore (Codegen.codegen_expr context the_module builder main_func)
+  ignore (Codegen.codegen_expr context the_module builder main_func);
+
+  (* Set up JIT and run it: *)
+  ignore (Llvm_executionengine.initialize ());
+  let engine = Llvm_executionengine.create the_module in
+  let main = Llvm_executionengine.get_function_address "main" (Foreign.funptr (Ctypes.(@->) Ctypes.void (Ctypes.returning Ctypes.int))) engine in
+  let result:int = main () in
+  Llvm_executionengine.dispose engine;
+  assert_equal result 44
 
 let suite =
 "suite" >:::

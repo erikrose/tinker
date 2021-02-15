@@ -51,20 +51,10 @@ let rec codegen_expr context the_module builder exp =
   match exp with
   | Ast.Double n -> const_float (double_type context) n
   | Ast.Int n -> const_int (i64_type context) n
-  | Ast.Call (callee, args) ->
-    (* Look up the name in the module table. *)
-    let callee =
-      match lookup_function callee the_module with
-      | Some callee -> callee
-      | None -> raise (Error "unknown function referenced")
-    in
-    let params = params callee in
-
-    (* If argument mismatch error: *)
-    if Array.length params <> List.length args then
-      raise (Error "incorrect # arguments passed");
+  | Ast.Call (func_expr, args) ->
+    let func_ptr = codegen_expr context the_module builder func_expr in
     let genned_args = List.map (codegen_expr context the_module builder) args in
-    build_call callee (Array.of_list genned_args) "" builder
+    build_call func_ptr (Array.of_list genned_args) "" builder
   | Ast.String str ->
     build_global_stringptr str "" builder
   | Ast.Block exprs ->
