@@ -4,7 +4,7 @@ type tipe =
   | StringType of int (** length *)
   | StringPtrType
   | VoidType
-  | FunctionType of tipe list * tipe (** args, return *) 
+  | FunctionType of tipe list * tipe (** args, return *)
 
 (** Base type for all expression nodes *)
 type expr =
@@ -20,7 +20,7 @@ type expr =
   | Block of expr list
   | If of expr * expr * expr (** condition, then, else *)
   | Var of string (** var read *)
-  | Assignment of string * expr (** var write: name, value *)
+  | Assignment of string * expr * tipe (** var write: name, value, type (until we have inference) *)
 
   (** A function, either internal linkage (with body) or external (without).
       We'll keep declaring types for external functions, even under type
@@ -29,11 +29,10 @@ type expr =
   | Function of string * tipe array * tipe * function_definition (* name, args, return, body *)
   (* Syntax should be something like `fun (a, b) -> external`, where "external"
      is a lexer artifact like "pass" in Python. *)
-  (* TODO: We don't strictly need to name functions; we could just assign them to vars (if we had top-level vars). The only problem would be how to know what to call them if we tried to call them from C. It might be tricky to ascertain that statically; what if we had a single function assigned to 2 separate vars? Stick a func ptr in one? (How do we make sure it gets dereffed?) Introduce some `export` syntax? *)
+  (* TODO: We don't strictly need to name functions; we could just assign them to vars (if we had top-level vars). The only problem would be how to know what to call them if we tried to call them from C. Introduce some `export` syntax? *)
 and function_definition =
   | Internal of expr (** function body *)
   | External (** It's found in another module. *)
-
 
 module String_set = Set.Make (String)
 
@@ -74,7 +73,7 @@ let assert_no_unwritten_reads_in_scope exp =
       (* Evaluate each arg in the context of the vars provably written in
          previous args: *)
       List.fold_left (fun accum exp -> proven_written exp accum) written args
-    | Assignment (var_name, _) ->
+    | Assignment (var_name, _, _) ->
       String_set.add var_name written
     | Block exprs ->
       (* For each expr in the block, evaluate each in the context of the vars

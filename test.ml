@@ -1,13 +1,13 @@
 open Llvm
 open OUnit2
 
-let main_function expr =
+let main_function exp =
   Ast.Function (
     "main",
     [| |],
     IntType,
     Ast.Internal (
-      expr
+      exp
     )
    )
 
@@ -32,13 +32,13 @@ let assignments_return_values test_ctxt =
   let the_module = create_module context "my singleton module" in
   let builder = builder context in
 
-  let main = main_function (Ast.Assignment ("x", Int(1))) in
+  let main = main_function (Ast.Assignment ("x", Int(1), Ast.IntType)) in
   ignore (Codegen.codegen_expr context the_module builder main)
 
 let undefined_reads_in_if_branches_not_allowed test_ctxt =
   let body = Ast.Block([
-                        Ast.Assignment("x", Int(1));
-                        Ast.If(Ast.Var("x"), Ast.Assignment("a", Int(1)), Ast.Assignment("q", Int(2)));
+                        Ast.Assignment("x", Int(1), Ast.IntType);
+                        Ast.If(Ast.Var("x"), Ast.Assignment("a", Int(1), Ast.IntType), Ast.Assignment("q", Int(2), Ast.IntType));
                         Ast.Var("a")
                        ]) in
   assert_raises (Exc.Undefined_var "a") (fun () -> Ast.assert_no_unwritten_reads_in_scope body)
@@ -65,13 +65,47 @@ let jit_works_for_tests test_ctxt =
   let result = run (main_function (Ast.Int 33)) in
   assert_equal result 33
 
+let global_functions_are_first_class test_ctxt =
+  let context = global_context () in
+  let the_module = create_module context "my singleton module" in
+  let builder = builder context in
+
+  let other_func = Ast.Function (
+      "other", [| |], IntType,
+      Ast.Internal (
+        Ast.Int 44
+      )
+    ) in
+  assert_equal !Codegen.is_generating_function false;
+  ignore (Codegen.codegen_expr context the_module builder other_func);
+  assert_equal !Codegen.is_generating_function false;
+  let main_func = Ast.Function (
+      "main", [| |], IntType,
+      Ast.Internal (
+        Ast.Block [
+          Ast.Assignment ("first_class_other_func",
+                          Ast.Var "other",
+                          Ast.FunctionType ([], Ast.IntType));
+          Ast.Int 6
+(*
+          Ast.Call (Ast.Var "first_class_other_func",
+                    [])
+*)
+        ]
+      )
+    ) in
+  ignore (Codegen.codegen_expr context the_module builder main_func)
+
 let suite =
 "suite" >:::
   [
+(*
     "Assignments must return their value." >:: assignments_return_values;
     "When the branches of an `if` read an undefined var, raise an error." >:: undefined_reads_in_if_branches_not_allowed;
     "Inner functions are disallowed for now." >:: inner_functions_raise_exception;
     "JITting test harness works" >:: jit_works_for_tests;
+*)
+    "Global functions are first-class." >:: global_functions_are_first_class;
   ]
 
 let () =

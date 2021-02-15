@@ -8,15 +8,29 @@ let main () =
   let puts = Ast.Function ("puts", [| StringPtrType |], IntType, Ast.External) in
   ignore (Codegen.codegen_expr context the_module builder puts);
 
-  let main = Ast.Function ("main",
-                           [| |],
-                           IntType,
-                           Ast.Internal (Ast.Block ([
-                                        Ast.Call("puts", [ String ("howdy") ]);
-                                        Ast.Assignment("x", Int(1));
-                                        Ast.Call("puts", [ Ast.If(Ast.Var("x"), String("true"), String("false")) ])
-                                     ]))) in
-  ignore (Codegen.codegen_expr context the_module builder main);
+  let other_func = Ast.Function (
+      "other", [| |], IntType,
+      Ast.Internal (
+        Ast.Int 44
+      )
+    ) in
+  ignore (Codegen.codegen_expr context the_module builder other_func);
+  let main_func = Ast.Function (
+      "main", [| |], IntType,
+      Ast.Internal (
+        Ast.Block [
+          Ast.Assignment ("first_class_other_func",
+                          Ast.Var "other",
+                          Ast.FunctionType ([], IntType));
+          Ast.Int 6
+          (*
+Ast.Call (Ast.Var "first_class_other_func",
+                    [])
+*)
+        ]
+      )
+    ) in
+  ignore (Codegen.codegen_expr context the_module builder main_func);
 
   dump_module the_module
 

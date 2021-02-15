@@ -1,6 +1,7 @@
 open Llvm
 open Llvm_analysis
 
+exception UndefinedVariable of string
 exception Error of string
 
 (** For the function currently being generated, a map of var name to memory
@@ -23,12 +24,15 @@ let rec llvm_type context ast_tipe =
     let arg_llvm_types = List.map (llvm_type context) arg_tipes in
     pointer_type (function_type (llvm_type context ret_tipe) (Array.of_list arg_llvm_types))
 
-(** Return a List of the assigned var names in the scope of an expression.
+type var_name_and_tipe = {name:string; tipe_:Ast.tipe}
+
+(** Return a List of var names and tipes for each assigned var name in the
+    scope of an expression.
 
     If the expression contains a function definition, we don't recurse into
     that; that would be a new scope, so the assignments therein would belong to
     it. *)
-let rec assignments_in node =
+let rec assignments_in node : var_name_and_tipe list =
   (* TODO: Don't concretize the returned list. *)
   match node with
     | Ast.Double _
@@ -41,7 +45,7 @@ let rec assignments_in node =
     | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
                                                  assignments_in then_;
                                                  assignments_in else_]
-    | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
+    | Ast.Assignment (var_name, value, var_tipe) -> {name=var_name; tipe_=var_tipe} :: assignments_in value
 
 let rec codegen_expr context the_module builder exp =
   match exp with
@@ -71,7 +75,7 @@ let rec codegen_expr context the_module builder exp =
     (* This null value will do for now, but it might not be the final one we want: *)
     let null_value = const_null (void_type context) in
     List.fold_left last_expr_value null_value exprs
-  | Ast.Assignment (name, value) ->
+  | Ast.Assignment (name, value, var_tipe) ->
     (* Codegen the value expr, then store it at the address of `name` as given
        by the hash table. The hash table also gives the type so we know how
        many bytes to copy. *)
@@ -81,8 +85,16 @@ let rec codegen_expr context the_module builder exp =
     ignore (build_store genned_value stack_slot builder);
     genned_value
   | Ast.Var name ->
-    let (stack_slot, _) = Hashtbl.find vars name in
-    build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
+    begin
+      try
+        let (stack_slot, _) = Hashtbl.find vars name in
+        build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
+      with Not_found ->
+        (* TODO: Once type inference is in place, use lookup_function for things typed as functions and lookup_global for all other globals. *)
+        match lookup_function name the_module with (* TODO: This prohibits forward refs. It raises if the global hasn't been added to the module yet. *)
+        | Some global -> global
+        | None -> raise (UndefinedVariable name)
+    end
   | Ast.If (condition, then_, else_) ->
     (* Generate something along these lines. It's very hard to understand the
        if-generation code without this as a reference.
@@ -167,7 +179,7 @@ let rec codegen_expr context the_module builder exp =
       declare_function name signature the_module
       (* TODO: Error if a function gets redeclared. *)
     in
-    let the_function = codegen_declaration name arg_tipes ret_tipe in
+    let the_function = codegen_declaration name arg_tipes ret_tipe in (* TODO: munge names *)
     let () = match definition with
     | Internal body ->
       (* Create a new basic block, and point the builder to the end of it: *)
@@ -176,21 +188,22 @@ let rec codegen_expr context the_module builder exp =
 
       Ast.assert_no_unwritten_reads_in_scope body;
 
-      (* What happens when we encounter an inner function? Don't screw up. Start a new Hashtbl (or go with a COW tree). Watch your block position. I guess generate all funcs as globals with munged names. LLVM IR does expect func ptrs as params to all call instructions, so we could just pass func ptrs around. *)
+      (* TODO: What happens when we encounter an inner function? Don't screw up. Start a new Hashtbl (or go with a COW tree). Watch your block position. I guess generate all funcs as globals with munged names. LLVM IR does expect func ptrs as params to all call instructions, so we could just pass func ptrs around. *)
 
       (* Add allocas for all local vars. They have to be in the entry block, or
          mem2reg won't work. *)
 
       (** If the given var isn't already allocated, gen the alloca, and add an
           entry to the symbol table: *)
-      let add_local_var t var_name =
-        if not (Hashtbl.mem vars var_name) then
-          let stack_slot = build_alloca (llvm_type context IntType) var_name builder in
-          Hashtbl.replace vars var_name (stack_slot, t)
-        in
-      (* For the moment, we support assigning only to ints, just so we can get
-         vars proven out without having to write type inference first. *)
-      List.iter (add_local_var IntType) (assignments_in body);
+      let add_local_var (name_and_tipe:var_name_and_tipe) =
+        let {name=var_name; tipe_=var_tipe} = name_and_tipe in
+        match Hashtbl.find_opt vars var_name with
+        | None ->
+          let stack_slot = build_alloca (llvm_type context var_tipe) var_name builder in
+          Hashtbl.replace vars var_name (stack_slot, var_tipe)
+        | Some _ -> ()
+      in
+      List.iter add_local_var (assignments_in body);
 
       (* Codegen body: *)
       let ret_val = codegen_expr context the_module builder body in
