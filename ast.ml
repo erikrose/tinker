@@ -1,13 +1,18 @@
 type tipe =
+  | BoolType
   | DoubleType
   | IntType
-  | StringType of int (** length *)
+  | StringType of int (** length. TODO: Make all strings the same type *)
   | StringPtrType
   | VoidType
   | FunctionType of tipe list * tipe (** args, return *)
+  | TipeVar of int (** serial number, starting from 0 *)
 
 (** Base type for all expression nodes *)
 type expr =
+  (* TODO: Add line and col to each variant for error reporting. Turn
+      everything into records, because that'll make them pretty long. *)
+  | Bool of bool
   | Double of float
   | Int of int (** semantic: 64-bit int *)
   | String of string
@@ -16,24 +21,52 @@ type expr =
   (** A block is a sequence of expressions whose value is that of the last
       expression evaluated. This exists as a separate idea from functions
       because it might also occur in global namespace. Besides, it gives us the
-      flexibility to become block-scoped at some point. *)
+      flexibility to become block-scoped at some point. An empty block is an
+      error, because what type would it be? *)
   | Block of expr list
   | If of expr * expr * expr (** condition, then, else *)
   | Var of string (** var read *)
   | Assignment of string * expr * tipe (** var write: name, value, type (until we have inference) *)
 
-  (** A function, either internal linkage (with body) or external (without).
-      We'll keep declaring types for external functions, even under type
-      inference. I don't want to infer signatures from callsites and get it
-      wrong, causing the callee to receive garbage and crash. *)
-  | Function of string * tipe array * tipe * function_definition (* name, args, return, body *)
-  (* Syntax should be something like `fun (a, b) -> external`, where "external"
-     is a lexer artifact like "pass" in Python. *)
+  (** A function definition *)
+  | Function of string * string array * expr (* name, args, body *)
   (* TODO: We don't strictly need to name functions; we could just assign them to vars (if we had top-level vars). The only problem would be how to know what to call them if we tried to call them from C. Introduce some `export` syntax? *)
-and function_definition =
-  | Internal of expr (** function body *)
-  | External (** It's found in another module. *)
+  
+  (** A declaration of an external function. We keep declaring types for these,
+      even under type inference. I don't want to infer signatures from callsites
+      and get it wrong, causing the callee to receive garbage and crash. *)
+  | ExternalFunction of string * tipe (* name, FunctionType *)
+  (* Syntax might be something like `fun (a, b) -> external`, where "external"
+     is a lexer artifact like "pass" in Python. *)
 
+(** Type-annotated expressions *)
+type texpr =
+  | TBool of bool
+  | TDouble of float
+  | TInt of int
+  | TString of string * tipe
+  | TCall of texpr * texpr list * tipe (* func, args, return tipe *)
+  | TBlock of texpr list * tipe
+  | TIf of texpr * texpr * texpr * tipe
+  | TVar of string * tipe
+  | TAssignment of string * texpr * tipe
+  | TFunction of string * string array * texpr * tipe (* name, arg names, body, FunctionType *)
+  | TExternalFunction of string * tipe
+
+let tipe_of texp =
+  match texp with
+  | TBool _ -> BoolType
+  | TDouble _ -> DoubleType
+  | TInt _ -> IntType
+  | TString (str, tipe) -> tipe
+  | TCall (func, args, ret_tipe) -> ret_tipe
+  | TBlock (exprs, tipe) -> tipe
+  | TIf (if_, then_, else_, tipe) -> tipe
+  | TVar (name, tipe) -> tipe
+  | TAssignment (name, value, tipe) -> tipe
+  | TFunction (name, args, body, tipe) -> tipe
+  | TExternalFunction (name, tipe) -> tipe
+ 
 module String_set = Set.Make (String)
 
 (** Raise an exception if there is a var that could be read before being
@@ -52,10 +85,12 @@ let assert_no_unwritten_reads_in_scope exp =
       a CFG and operate over that instead. *)
   let rec proven_written exp written =
     match exp with
+    | Bool _
     | Double _
     | Int _
     | String _
-    | Function _ -> String_set.empty
+    | Function _
+    | ExternalFunction _ -> String_set.empty
     | If (if_, then_, else_) ->
       let written_in_if = proven_written if_ written in
       let written_in_then = proven_written then_ written_in_if in

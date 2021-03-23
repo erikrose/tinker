@@ -25,12 +25,19 @@ compile.native: *.ml
 	ocamlbuild -pkgs llvm,llvm.analysis compile.native
 
 clean:
-	rm -rf _build compile.native build a.out test.native
+	rm -rf _build compile.native build a.out test.native test_unify.native
 
 test: _build/test.native
-	./test.native -ci true
+	_build/test.native -ci true
 
 _build/test.native: *.ml
 	ocamlbuild -pkgs ctypes,llvm,llvm.analysis,llvm.executionengine,ounit2 test.native
 
-.PHONY: all clean run build test
+# Test unification:
+test_unify: _build/test_unify.native
+	_build/test_unify.native -ci true
+
+_build/test_unify.native: ast.ml infer.ml test_unify.ml
+	ocamlbuild -pkgs ounit2 test_unify.native
+
+.PHONY: all clean run build test test_unify

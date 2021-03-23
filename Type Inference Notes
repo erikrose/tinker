@@ -1,0 +1,91 @@
+let infer_types (ast : expr) : texpr =
+  NEXT: Do inference for a simple function by hand, on paper.
+  
+
+fun main() =
+  g = 8
+
+Constraints:
+type(8, int)
+g, type(8)
+type(main, type(g))
+
+Constraints again:
+type(main, func((), m'))
+type('g, int)
+type('m, 'g)
+
+
+fun main(i) =
+  g = +(i, 9)
+  if >(g, 0)
+    g
+  else
+    i
+
+Constraints:
+type('+, func(int, int))
+type(main, func((), 'm)
+type('g, 'h)  -- 'h is i+9's type
+type('g, '+)
+
+Okay, so the constraints we're collecting are pairs of types. Then we unify those. I think all annotate() is doing is assigning fresh type [numbers] to vars, funs, and applications, making sure not to make fresh ones if we encounter some ref to an existing var (see infer.ml around line 31). This is going to take some unit testing.
+Next, understand what collect() is doing. It seems to do something interesting only in the AApp case. Otherwise, it never adds to u, which is what it eventually returns. Perhaps this is because this tiny language has no literals like 8 or "foo", so there's nothing to learn from anything but function application?
+
+fun main() =
+  g = 8
+
+'main = () -> 'g  # from a Block variant in some match clause
+'g = int
+
+fun main(i) =
+  g = +(i, 9)
+  if >(g, 0)
+    g
+  else
+    i
+
+'main = 'i -> 'r  # r is an unknown type var for the return value
++ = (int, int) -> int  # From stdlib or wherever. If I come up with a tuple syntax (which straight lambda calculus doesn't need), I get number-of-args checking for free from unification.  # type(+, arrow(tuple(int, int), int))
+'g = '+('i, int)
+> = (int, int) -> bool  # from stdlib or whatever
+`>('g, int) = bool  # from a rule about `if`. Catches `if` conditions that aren't bool.
+'g = 'r
+'i = 'r
+
+Next, how do I do it systematically, without thinking? Methinks I need some typing rules, like...
+
+1. `If` conditions are bools. Terminal expressions of `if` branches are the same type.
+2. A block's type is that of its terminal statements. Which expressions are terminal can be determined by recursion: if you hit an if, the two branches. Then find the terminal expressions of those. If one contains another if, the terminals are the 2 branches of it. And so on.
+3. Assignments have the type of their rvalue.
+4. A function definition's return type unifies with its body's.
+5. A function application's args and return type meshes with its definition's.
+
+I don't think I need to assign types to anything but named entities (function defs, function applications, vars, assignments, …). But wait: ifs. But if is like a function named "if" that takes a bool and same-typed blocks. I'm special-casing it only because I don't otherwise support first-class blocks in this language (just for expediency; I may change this).
+So bv and perhaps the Hashtbl h are those envs we haul around, obviating the need to alpha-rename everything up front. (Instead, we effectively alpha-rename new vars as we encounter them (in the Fun case of annotate()) by assigning them to new type vars.) I like that, but I'm not sure why association lists are ever used instead of hash tables. Maybe it's not as bad in lambda calculus where every function can introduce only 1 new binding.
+
+fun main(i) =
+  g = +(i, 3)
+  if >(g, 0)
+    g
+  else
+    i
+
+fun +(i, j) =
+  7
+
+'main = 'i -> 'mainreturn
+'mainreturn = 'body (rule 4)  # Now recurse into the block that is the body. Here we'd be calling, recursively, annotate(body) and hitting a |Block case, which would iterate through the block's exprs, calling annotate() on each, and returning the typevar of the last.
+'g = '+('i, int) = app(+, 'i, int) (3)
+'+ = (i', i') -> i'  # stdlib. You know, I guess we're going to need type declarations on at least some of the primitive funcs. You've got to be able to get from "8 is an int" to "8 + 8 is an int" somehow. But some primitives can still be polymorphic, like `identity()`. (Maybe that makes them non-primitives.)
+'body = 'if (2)  # I mean the type of this `if`, not any `if`.
+'if = 'g (1)
+'if = 'i (1)
+'>g0 = app(>, 'g, 'g) = '> (1)
+'> = ('g, 'g) -> bool  # from stdlib
+
+If I come up with a tuple syntax (which straight lambda calculus doesn't need), I get number-of-args checking for free from unification.  # type(+, arrow(tuple(int, int), int))
+
+So annotate() recurses through the AST, returning a parallel AST that's typed. It makes sure to use the same type variable for identical variables.
+
+Next, write an annotate() test and annotate() itself. The interesting parts will be (1) dragging the env around to ensure the same type vars get used for identical vars and (2) tuples.

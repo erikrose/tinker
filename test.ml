@@ -27,7 +27,7 @@ let run_main the_module =
   (* This has the side effect of generating the machine code, after which no
      more changes to the module will ever be taken into account: *)
   let func = Llvm_executionengine.get_function_address "main" (Foreign.funptr (Ctypes.(@->) Ctypes.void (Ctypes.returning Ctypes.int))) engine in
-  let result:int = func () in
+  let result : int = func () in
   Llvm_executionengine.dispose engine;
   result
 
