@@ -64,7 +64,7 @@ let tipe_of texp =
   | TIf (if_, then_, else_, tipe) -> tipe
   | TVar (name, tipe) -> tipe
   | TAssignment (name, value, tipe) -> tipe
-  | TFunction (name, args, body, tipe) -> tipe
+  | TFunction (name, args, body, function_type) -> function_type
   | TExternalFunction (name, tipe) -> tipe
  
 module String_set = Set.Make (String)

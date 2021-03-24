@@ -40,7 +40,12 @@ let annotate (e : expr) : texpr =
          those 2 are even different in our language). So we can't always look
          up the type of the function here. We leave that to the unifier. *)
       let func = annotate_core bound_vars func_expr in
-      TCall (func, List.map (annotate_core bound_vars) args, tipe_of func)
+      begin
+        match tipe_of func with
+        | FunctionType (arg_tipes, ret_type) ->
+          TCall (func, List.map (annotate_core bound_vars) args, ret_type)
+        | _ -> raise (Error "You tried to call something that isn't a function.")
+      end
     | Block exprs ->
       let texprs = List.map (annotate_core bound_vars) exprs in
       TBlock (texprs, tipe_of (last texprs))
