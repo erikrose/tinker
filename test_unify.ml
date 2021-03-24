@@ -25,6 +25,11 @@ let annotate_bools_doubles_ifs_functions test_ctxt =
     ) in
   assert_equal (Infer.annotate ast) typed
 
+let annotate_strings test_ctxt =
+  let ast = String "smoobar" in
+  let typed = TString ("smoobar", StringType 7) in
+  assert_equal (Infer.annotate ast) typed
+
 (*
 let annotate_free =
   ast = fun main(i) -> if (true) then 1.2 else 3.4
@@ -37,6 +42,7 @@ let suite =
 "suite" >:::
   [
     "Ifs and function return types annotate correctly. Doubles and bools work, too." >:: annotate_bools_doubles_ifs_functions;
+    "Strings annotate." >:: annotate_strings;
   ]
 
 let () =
