@@ -83,7 +83,7 @@ let global_functions_are_first_class test_ctxt =
       )
     ) in
   assert_equal !Codegen.is_generating_function false;
-  ignore (Codegen.codegen_expr context the_module builder other_func);
+  ignore (Codegen.codegen_expr context the_module builder (infer_types other_func));
   assert_equal !Codegen.is_generating_function false;
   let main_func = Ast.Function (
       "main", [| |], IntType,
@@ -97,7 +97,7 @@ let global_functions_are_first_class test_ctxt =
         ]
       )
     ) in
-  ignore (Codegen.codegen_expr context the_module builder main_func);
+  ignore (Codegen.codegen_expr context the_module builder (infer_types main_func));
 
   let result = run_main the_module in
   assert_equal result 44

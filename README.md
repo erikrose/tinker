@@ -119,6 +119,15 @@ fun foo
         -- Anyway, the cost of going with function-scoping is that you have to declare nonlocals you want to write (or have a special = operator for that). That's a rarity. (It's also something of an antipattern: it promotes hidden mutations that would better be expressed through return values. Maybe don’t even support it.) The dividend is you don't need to declare vars (or read the usually-just-noise declarations). Declarations exist solely to broaden the scope of a var, assuming a language in which vars are otherwise assumed to be local to the block they're mentioned in.
         -- It's important to allow shadowing of nonlocals in a function; otherwise, you can't paste functions around without reading them carefully to make sure they don't overwrite nonlocals.
         -- A read in an if is fine if the if has the same or a logically equivalent condition as one which previously wrote. For ifs which write and are nested, the whole chain of nested if conditions (up to the point where the writes and the reads share a common encloser) will have to be satisfied...or something. Maybe I can just use unification and get some more milage out of the unifier I'm going to need anyway for Hindley-Milner.
+
+Maybe WYSIWYG, grouping-wise:
+6+1 * 3+1 = 28
+
+collect (item :: rest) some_list
+...could be abbreviated as...
+collect item::rest some_list
+...which scans better.
+If you're going to have significant whitespace, have significant whitespace. :-)
 ```
 
 ## Status
@@ -126,7 +135,7 @@ fun foo
 Right now, "Hello, world" is hard-coded into the compiler in the form of AST expressions. There's no parser yet, because I don't know what I want the syntax to look like. To install dependencies...
 
 ```
-opam install ctypes-foreign llvm ounit2
+opam install ctypes-foreign llvm ounit2 ppx_deriving dune
 ```
 
 Also install the LLVM headers.
@@ -177,7 +186,15 @@ To compile and run "Hello, world", run `make run`.
 * Raise an error if a function returns a different type than declared. (This should be taken care of by the unifier.)
 * GC
 * Loops. All looping constructs can be lowered to an infinite loop plus a break statement. Infinite loops can be lowered to recursion with TCO. Not sure about the breaks.
-* Decide on dispatch. Will it be hard for a human to find where a function's code is?
+
+    If everything is an expr, what should a loop's value be? Its last statement seems arbitrary and rarely useful. What if it were a list of the values of its last statements? That would be often useful, plus it serves the purpose of a list comp!
+
+    ```
+    for x in range(8)
+        x**2
+    ```
+    We can prove whether anybody does anything with the value and avoid collecting it if not. Of course, this will require all terminal statements of a loop to have the same type. Is that going to be too annoying? Maybe we could require that only if you're doing anything with the value.
+* Decide on dispatch. Will it be hard for a human to find where a function's code is? https://www.ocaml.org/releases/4.11/htmlman/lablexamples.html lays out one cohesive system of kwargs + inference and even suggests some naming conventions.
 * Do non-primitive types, like ML enums. We won't have type erasure on enums because we'll have to be able to distinguish among variants in `match` clauses.
 * We might be able to get away with just recursion for type inference, as long as we explicitly declare function args and return types (at least temporarily): https://mukulrathi.co.uk/create-your-own-programming-language/intro-to-type-checking/
 * Make protos unnecessary (except for externals, I guess).

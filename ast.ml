@@ -7,6 +7,7 @@ type tipe =
   | VoidType
   | FunctionType of tipe list * tipe (** args, return *)
   | TipeVar of int (** serial number, starting from 0 *)
+  [@@deriving show]
 
 (** Base type for all expression nodes *)
 type expr =
@@ -52,20 +53,21 @@ type texpr =
   | TAssignment of string * texpr * tipe
   | TFunction of string * string array * texpr * tipe (* name, arg names, body, FunctionType *)
   | TExternalFunction of string * tipe
+  [@@deriving show]
 
 let tipe_of texp =
   match texp with
   | TBool _ -> BoolType
   | TDouble _ -> DoubleType
   | TInt _ -> IntType
-  | TString (str, tipe) -> tipe
-  | TCall (func, args, ret_tipe) -> ret_tipe
-  | TBlock (exprs, tipe) -> tipe
-  | TIf (if_, then_, else_, tipe) -> tipe
-  | TVar (name, tipe) -> tipe
-  | TAssignment (name, value, tipe) -> tipe
-  | TFunction (name, args, body, function_type) -> function_type
-  | TExternalFunction (name, tipe) -> tipe
+  | TString (_, tipe) -> tipe
+  | TCall (_, _, ret_tipe) -> ret_tipe
+  | TBlock (_, tipe) -> tipe
+  | TIf (_, _, _, tipe) -> tipe
+  | TVar (_, tipe) -> tipe
+  | TAssignment (_, _, tipe) -> tipe
+  | TFunction (_, _, _, function_type) -> function_type
+  | TExternalFunction (_, tipe) -> tipe
  
 module String_set = Set.Make (String)
 

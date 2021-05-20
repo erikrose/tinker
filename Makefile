@@ -34,10 +34,8 @@ _build/test.native: *.ml
 	ocamlbuild -pkgs ctypes,llvm,llvm.analysis,llvm.executionengine,ounit2 test.native
 
 # Test unification:
-test_unify: _build/test_unify.native
-	_build/test_unify.native -ci true
-
-_build/test_unify.native: ast.ml infer.ml test_unify.ml
-	ocamlbuild -pkgs ounit2 test_unify.native
+test_unify:
+	dune build test_unify.exe
+	_build/default/test_unify.exe -ci true
 
 .PHONY: all clean run build test test_unify

@@ -1,8 +1,9 @@
-open Ast
 open OUnit2
 
+open Ast
+
 (** Just see if we can assign some simple type vars to things. *)
-let annotate_bools_doubles_ifs_functions test_ctxt =
+let annotate_bools_doubles_ifs_functions _ =
   let ast = Function (
       "main",
       [| |],
@@ -23,12 +24,24 @@ let annotate_bools_doubles_ifs_functions test_ctxt =
       ),
       FunctionType ([], DoubleType)
     ) in
-  assert_equal (Infer.annotate ast) typed
+  assert_equal (Infer.annotate ast) typed ~printer:show_texpr
 
-let annotate_strings test_ctxt =
+let annotate_strings _ =
   let ast = String "smoobar" in
   let typed = TString ("smoobar", StringType 7) in
   assert_equal (Infer.annotate ast) typed
+
+let annotate_calls _ =
+  let ast = Call (
+      Var "someFunc",
+      [ Int 1 ]
+    ) in
+  let expected = TCall (
+    TVar ("someFunc", TipeVar 1),
+    [ TInt 1 ],
+    TipeVar 2
+  ) in
+  assert_equal (Infer.annotate ast) expected ~printer:show_texpr
 
 (*
 let annotate_free =
@@ -43,6 +56,7 @@ let suite =
   [
     "Ifs and function return types annotate correctly. Doubles and bools work, too." >:: annotate_bools_doubles_ifs_functions;
     "Strings annotate." >:: annotate_strings;
+    "Calls to undefined functions annotate properly." >:: annotate_calls;
   ]
 
 let () =

@@ -8,13 +8,13 @@ let rec last list =
   match list with
   | [] -> raise (Error "Tried to get the last item of an empty list.")
   | [only] -> only
-  | head :: rest -> last rest
+  | _ :: rest -> last rest
 
-(** Apply type vars to the AST, which we can later derive constraints between
-    and solve. *)
+(** Apply type vars to the AST, which we can later derive constraints among and
+    solve. *)
 let annotate (e : expr) : texpr =
   let type_var_id = ref 0 in
-  (** Return a new type variable, identified by a serial number. *)
+  (** Return a new type variable, identified by a serial number, starting at 1. *)
   let new_type_var () =
     incr type_var_id;
     TipeVar !type_var_id in
@@ -40,12 +40,11 @@ let annotate (e : expr) : texpr =
          those 2 are even different in our language). So we can't always look
          up the type of the function here. We leave that to the unifier. *)
       let func = annotate_core bound_vars func_expr in
-      begin
-        match tipe_of func with
-        | FunctionType (arg_tipes, ret_type) ->
-          TCall (func, List.map (annotate_core bound_vars) args, ret_type)
-        | _ -> raise (Error "You tried to call something that isn't a function.")
-      end
+      TCall (func, List.map (annotate_core bound_vars) args, new_type_var ())
+      (* Later, collect() will construct a constraint insisting that tipe_of
+         func = Function (tipes_of args, that new type var). That should bind
+         the new type var to the type of the function body, and then away we
+         go. *)
     | Block exprs ->
       let texprs = List.map (annotate_core bound_vars) exprs in
       TBlock (texprs, tipe_of (last texprs))
@@ -76,9 +75,9 @@ let annotate (e : expr) : texpr =
     | Function (name, arg_name_array, body) ->
       let arg_names = Array.to_list arg_name_array in
       (* Let each arg_name be a new type var: *)
-      let arg_tipes = List.map (fun arg -> new_type_var ()) arg_names in
+      let arg_tipes = List.map (fun _ -> new_type_var ()) arg_names in
       let arg_names_and_tipes = List.map2 (fun n t  -> (n, t)) arg_names arg_tipes in
-      let tbody = annotate_core (arg_names_and_tipes @ bound_vars) body in
+      let tbody = annotate_core (arg_names_and_tipes @ bound_vars) body in (* TODO: Add function name itself to scope. Or dispense with functions having names, and figure out how to get main() called (and, later, how to get Tinker functions linkable from other languages). *)
       TFunction (name, arg_name_array, tbody, FunctionType (arg_tipes, tipe_of tbody))
     | ExternalFunction (name, function_tipe) ->
       TExternalFunction (name, function_tipe)
