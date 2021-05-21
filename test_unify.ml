@@ -43,8 +43,13 @@ let annotate_calls _ =
   ) in
   assert_equal (Infer.annotate ast) expected ~printer:show_texpr
 
+let annotate_block _ =
+  let ast = Block [Int 4; Int 5; Bool true] in
+  let typed = TBlock ([TInt 4; TInt 5; TBool true], BoolType) in
+  assert_equal (Infer.annotate ast) typed ~printer:show_texpr
+
 (*
-let annotate_free =
+let annotate_function_with_free_param =
   ast = fun main(i) -> if (true) then 1.2 else 3.4
   expected = fun main ('0) -> double
 *)
@@ -57,6 +62,7 @@ let suite =
     "Ifs and function return types annotate correctly. Doubles and bools work, too." >:: annotate_bools_doubles_ifs_functions;
     "Strings annotate." >:: annotate_strings;
     "Calls to undefined functions annotate properly." >:: annotate_calls;
+    "The type of a block is the type of its last expr." >:: annotate_block;
   ]
 
 let () =
