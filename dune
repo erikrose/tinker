@@ -1,4 +1,5 @@
 (executable
   (name test_unify)
   (libraries ounit2)
+  (modes (byte exe))
   (preprocess (pps ppx_deriving.show)))

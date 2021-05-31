@@ -24,12 +24,12 @@ let annotate_bools_doubles_ifs_functions _ =
       ),
       FunctionType ([], DoubleType)
     ) in
-  assert_equal (Infer.annotate ast) typed ~printer:show_texpr
+  assert_equal typed (Infer.annotate ast) ~printer:show_texpr
 
 let annotate_strings _ =
   let ast = String "smoobar" in
   let typed = TString ("smoobar", StringType 7) in
-  assert_equal (Infer.annotate ast) typed
+  assert_equal typed (Infer.annotate ast)
 
 let annotate_calls _ =
   let ast = Call (
@@ -41,18 +41,30 @@ let annotate_calls _ =
     [ TInt 1 ],
     TipeVar 2
   ) in
-  assert_equal (Infer.annotate ast) expected ~printer:show_texpr
+  assert_equal expected (Infer.annotate ast) ~printer:show_texpr
 
 let annotate_block _ =
   let ast = Block [Int 4; Int 5; Bool true] in
   let typed = TBlock ([TInt 4; TInt 5; TBool true], BoolType) in
-  assert_equal (Infer.annotate ast) typed ~printer:show_texpr
+  assert_equal typed (Infer.annotate ast) ~printer:show_texpr
 
-(*
-let annotate_function_with_free_param =
-  ast = fun main(i) -> if (true) then 1.2 else 3.4
-  expected = fun main ('0) -> double
-*)
+(* Ifs are self-evidently correct. *)
+(* It's hard to test Vars to any extent further than "it doesn't crash" until we collect(). *)
+(* Assignments are self-evidently correct. *)
+
+let annotate_function_returning_bound_var _ =
+  let ast = Function (
+      "main",
+      [| "a" |],
+      Var "a"
+    ) in
+  let expected = TFunction (
+      "main",
+      [| "a" |],
+      TVar ("a", TipeVar 1),
+      FunctionType ([TipeVar 1], TipeVar 1)
+    ) in
+  assert_equal expected (Infer.annotate ast) ~printer:show_texpr
 
 (* Then maybe test an If whose branches differ in type and make sure that doesn't unify. *)
 
@@ -63,7 +75,9 @@ let suite =
     "Strings annotate." >:: annotate_strings;
     "Calls to undefined functions annotate properly." >:: annotate_calls;
     "The type of a block is the type of its last expr." >:: annotate_block;
+    "Types of bound vars are looked up successfully." >:: annotate_function_returning_bound_var;
   ]
 
 let () =
+  (*annotate_function_returning_bound_var ()*)
   run_test_tt_main suite
