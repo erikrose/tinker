@@ -83,9 +83,47 @@ let annotate (e : expr) : texpr =
       TExternalFunction (name, function_tipe)
   in annotate_core [] e
 
+(** Given a list of typed expressions, return a list of pairs to unify. This
+    function is where the typing rules are applied (or at least the ones not
+    already applied in annotate()). *)
+let rec collect (texprs : texpr list) (unifying_pairs : (tipe * tipe) list) : (tipe * tipe) list =
+  (* Basically, we call collect() recursively, adding any contained texprs that
+     might provide material for further constraints to the first param and
+     building the list of constraints in the second. *)
+  match texprs with
+  | [] -> unifying_pairs
+  | (TBool _ | TDouble _ | TInt _ | TString _ | TVar _ | TExternalFunction _) :: rest ->
+    (* There are no constraints to extract from literals and these other things. *)
+    collect rest unifying_pairs
+  | TCall (func, args, ret_tipe) :: rest ->
+    (* Make sure the type of the function agrees with the types of the args
+       passed in and the return type expected. *)
+    collect (func :: args @ rest) ((tipe_of func, FunctionType ((List.map tipe_of args), ret_tipe)) :: unifying_pairs)
+  | TBlock (block_texprs, _) :: rest ->
+    (* The typing rule "the type of a block is the type of its last statement"
+       is already applied by annotate(). *)
+    collect (block_texprs @ rest) unifying_pairs
+  | TIf (if_, then_, else_, tipe_) :: rest ->
+    collect (if_ :: then_ :: else_ :: rest)
+            ((* `if` conditions are bools: *)
+             (tipe_of if_, BoolType) ::
+             (* The `then` and `else` clauses return the same type: *)
+             (tipe_of then_, tipe_of else_) ::
+             (* And the `then` and `else` tipes are the same as the tipe of the
+                whole `if` expression: *)
+             (tipe_of then_, tipe_) ::
+             unifying_pairs)
+  | TAssignment (_, rvalue, _) :: rest ->
+    (* The typing rule "an assigned var has the type of its rvalue" is applied by annotate(). *)
+    collect (rvalue :: rest) unifying_pairs
+  | TFunction (_, _, body, _) :: rest ->
+    (* Arg names are already unified with occurrences of them in the function body, via annotate. *)
+    collect (body :: rest) unifying_pairs
+
 (*
-let rec collect (texprs : texpr list) =
-  match  in
-  | TIf (if_, then_, else_, tipe_) ->
-    yield from [(if_, bool), (then_, else_)]
+let unify e =
+  let annotated = annotate e in
+  let constraints = collect [annotated] in
+  let resolutions = unify constraints in
+  apply resolutions annotated (or something)
 *)
