@@ -2,6 +2,9 @@ open OUnit2
 
 open Ast
 
+let assert_annotate_equal annotated ast = 
+  assert_equal annotated (Infer.annotate ast) ~printer:show_texpr
+
 (** Just see if we can assign some simple type vars to things. *)
 let annotate_bools_doubles_ifs_functions _ =
   let ast = Function (
@@ -12,7 +15,7 @@ let annotate_bools_doubles_ifs_functions _ =
         Double 1.2,
         Double 3.4
       )
-    ) in
+  ) in
   let typed = TFunction (
       "main",
       [| |],
@@ -23,30 +26,30 @@ let annotate_bools_doubles_ifs_functions _ =
         DoubleType
       ),
       FunctionType ([], DoubleType)
-    ) in
-  assert_equal typed (Infer.annotate ast) ~printer:show_texpr
+  ) in
+  assert_annotate_equal typed ast
 
 let annotate_strings _ =
   let ast = String "smoobar" in
   let typed = TString ("smoobar", StringType 7) in
-  assert_equal typed (Infer.annotate ast)
+  assert_annotate_equal typed ast
 
 let annotate_calls _ =
   let ast = Call (
-      Var "someFunc",
-      [ Int 1 ]
-    ) in
+    Var "someFunc",
+    [Int 1]
+  ) in
   let expected = TCall (
     TVar ("someFunc", TipeVar 1),
-    [ TInt 1 ],
+    [TInt 1],
     TipeVar 2
   ) in
-  assert_equal expected (Infer.annotate ast) ~printer:show_texpr
+  assert_annotate_equal expected ast
 
 let annotate_block _ =
   let ast = Block [Int 4; Int 5; Bool true] in
   let typed = TBlock ([TInt 4; TInt 5; TBool true], BoolType) in
-  assert_equal typed (Infer.annotate ast) ~printer:show_texpr
+  assert_annotate_equal typed ast
 
 (* Ifs are self-evidently correct. *)
 (* It's hard to test Vars to any extent further than "it doesn't crash" until we collect(). *)
@@ -54,17 +57,17 @@ let annotate_block _ =
 
 let annotate_function_returning_bound_var _ =
   let ast = Function (
-      "main",
-      [| "a" |],
-      Var "a"
-    ) in
+    "main",
+    [| "a" |],
+    Var "a"
+  ) in
   let expected = TFunction (
-      "main",
-      [| "a" |],
-      TVar ("a", TipeVar 1),
-      FunctionType ([TipeVar 1], TipeVar 1)
-    ) in
-  assert_equal expected (Infer.annotate ast) ~printer:show_texpr
+    "main",
+    [| "a" |],
+    TVar ("a", TipeVar 1),
+    FunctionType ([TipeVar 1], TipeVar 1)
+  ) in
+  assert_annotate_equal expected ast
 
 (* Then maybe test an If whose branches differ in type and make sure that doesn't unify. *)
 
@@ -79,5 +82,4 @@ let suite =
   ]
 
 let () =
-  (*annotate_function_returning_bound_var ()*)
   run_test_tt_main suite
