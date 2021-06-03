@@ -79,6 +79,21 @@ let collect_call _ =
                 FunctionType ([StringType 3; IntType], TipeVar 2)]
                (Infer.collect [annotated] [])
 
+let collect_if _ =
+  let annotated = TIf (
+    TInt 8, (* cond *)
+    TVar ("thenExpr", TipeVar 1),
+    TVar ("elseExpr", TipeVar 2),
+    TipeVar 3
+  ) in
+  (* Of course, the following wouldn't successfully unify, but it more
+     unambiguously demonstrates that annotation is working than would repeating
+     TipeVars: *)
+  assert_equal [(IntType, BoolType); 
+                (TipeVar 1, TipeVar 2);
+                (TipeVar 1, TipeVar 3)]
+               (Infer.collect [annotated] [])
+
 (* Then maybe test an If whose branches differ in type and make sure that doesn't unify. *)
 
 let suite =
@@ -89,7 +104,8 @@ let suite =
     "Calls to undefined functions annotate properly. Also, the new-free-var branch of var lookup works." >:: annotate_calls;
     "The type of a block is the type of its last expr." >:: annotate_block;
     "Types of bound vars are looked up successfully." >:: annotate_function_returning_bound_var;
-    "The type of a function is constrained to agree with the types of its args and return value" >:: collect_function;
+    "The type of a call is constrained to agree with the types of its args and return value." >:: collect_call;
+    "Proper type constraints for ifs are generated." >:: collect_if;
   ]
 
 let () =
