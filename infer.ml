@@ -84,8 +84,8 @@ let annotate (e : expr) : texpr =
   in annotate_core [] e
 
 (** Given a list of typed expressions, return a list of pairs to unify. This
-    function is where the typing rules are applied (or at least the ones not
-    already applied in annotate()). *)
+    function is where most of the typing rules are applied--the ones not
+    already applied in annotate(). *)
 let rec collect (texprs : texpr list) (unifying_pairs : (tipe * tipe) list) : (tipe * tipe) list =
   (* Basically, we call collect() recursively, adding any contained texprs that
      might provide material for further constraints to the first param and
@@ -123,7 +123,7 @@ let rec collect (texprs : texpr list) (unifying_pairs : (tipe * tipe) list) : (t
 (*
 let unify e =
   let annotated = annotate e in
-  let constraints = collect [annotated] in
+  let constraints = collect [annotated] [] in
   let resolutions = unify constraints in
   apply resolutions annotated (or something)
 *)

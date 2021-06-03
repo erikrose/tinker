@@ -69,8 +69,7 @@ let annotate_function_returning_bound_var _ =
   ) in
   assert_annotate_equal expected ast
 
-
-let collect_function _ =
+let collect_call _ =
   let annotated = TCall (
     TVar ("repeat", TipeVar 1),
     [TString ("foo", StringType 3); TInt 9],
@@ -87,7 +86,7 @@ let suite =
   [
     "Ifs and function return types annotate correctly. Doubles and bools work, too." >:: annotate_bools_doubles_ifs_functions;
     "Strings annotate." >:: annotate_strings;
-    "Calls to undefined functions annotate properly." >:: annotate_calls;
+    "Calls to undefined functions annotate properly. Also, the new-free-var branch of var lookup works." >:: annotate_calls;
     "The type of a block is the type of its last expr." >:: annotate_block;
     "Types of bound vars are looked up successfully." >:: annotate_function_returning_bound_var;
     "The type of a function is constrained to agree with the types of its args and return value" >:: collect_function;
