@@ -94,6 +94,13 @@ let collect_if _ =
                 (TipeVar 1, TipeVar 3)]
                (Infer.collect [annotated] [])
 
+(** Inferrer has to infer the type of the 7, percolate that up to the
+    Assignment, then have the unifier say "Yep, they're the same, so they
+    unify". *)
+let test_infer_types _ =
+  let ast = Assignment ("foo", Int 7) in
+  assert_equal (TAssignment ("foo", TInt 7, IntType)) (Infer.infer_types ast)
+
 (* Then maybe test an If whose branches differ in type and make sure that doesn't unify. *)
 
 let suite =
@@ -106,6 +113,7 @@ let suite =
     "Types of bound vars are looked up successfully." >:: annotate_function_returning_bound_var;
     "The type of a call is constrained to agree with the types of its args and return value." >:: collect_call;
     "Proper type constraints for ifs are generated." >:: collect_if;
+    "Smoketest inference integration." >:: test_infer_types;
   ]
 
 let () =

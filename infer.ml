@@ -39,7 +39,7 @@ let annotate (e : expr) : texpr =
          go. *)
     | Block exprs ->
       let texprs = List.map (annotate_core bound_vars) exprs in
-      TBlock (texprs, tipe_of (last texprs))
+      TBlock (texprs, tipe_of (Utils.last texprs))
     | If (if_, then_, else_) ->
       let tthen = annotate_core bound_vars then_ in
       TIf (annotate_core bound_vars if_,
@@ -61,24 +61,24 @@ let annotate (e : expr) : texpr =
           with Not_found ->
             let t = new_type_var () in Hashtbl.add free_vars name t; TVar (name, t)
       end
-    | Assignment (var_name, value, _) ->
+    | Assignment (var_name, value) ->
       let tvalue = annotate_core bound_vars value in
       TAssignment (var_name, tvalue, tipe_of tvalue)
     | Function (name, arg_name_array, body) ->
       let arg_names = Array.to_list arg_name_array in
       (* Let each arg_name be a new type var: *)
       let arg_tipes = List.map (fun _ -> new_type_var ()) arg_names in
-      let arg_names_and_tipes = List.map2 (fun n t  -> (n, t)) arg_names arg_tipes in
+      let arg_names_and_tipes = Utils.zip arg_names arg_tipes in
       let tbody = annotate_core (arg_names_and_tipes @ bound_vars) body in (* TODO: Add function name itself to scope. Or dispense with functions having names, and figure out how to get main() called (and, later, how to get Tinker functions linkable from other languages). *)
       TFunction (name, arg_name_array, tbody, FunctionType (arg_tipes, tipe_of tbody))
     | ExternalFunction (name, function_tipe) ->
       TExternalFunction (name, function_tipe)
   in annotate_core [] e
 
-(** Given a list of typed expressions, return a list of pairs to unify. This
-    function is where most of the typing rules are applied--the ones not
+(** Given a list of typed expressions, return a list of pairs that must unify.
+    This function is where most of the typing rules are applied--the ones not
     already applied in annotate(). *)
-let rec collect (texprs : texpr list) (unifying_pairs : (tipe * tipe) list) : (tipe * tipe) list =
+let rec collect (texprs : texpr list) (unifying_pairs : Unify.constraints) : Unify.constraints =
   (* Basically, we call collect() recursively, adding any contained texprs that
      might provide material for further constraints to the first param and
      building the list of constraints in the second. *)
@@ -106,16 +106,43 @@ let rec collect (texprs : texpr list) (unifying_pairs : (tipe * tipe) list) : (t
              (tipe_of then_, tipe_) ::
              unifying_pairs)
   | TAssignment (_, rvalue, _) :: rest ->
-    (* The typing rule "an assigned var has the type of its rvalue" is applied by annotate(). *)
+    (* The typing rule "an assigned var has the type of its rvalue" is applied
+       by annotate(). *)
     collect (rvalue :: rest) unifying_pairs
   | TFunction (_, _, body, _) :: rest ->
-    (* Arg names are already unified with occurrences of them in the function body, via annotate. *)
+    (* Arg names are already unified with occurrences of them in the function
+       body, via annotate. *)
     collect (body :: rest) unifying_pairs
 
-(*
-let unify e =
+(** Apply substitutions from the unifier to the types hanging off an annotated
+    expression tree, making concrete all the types we can. (The rest will have
+    to be monomorphized or whatever.) *)
+let rec substitute (s : Unify.substitutions) (te : texpr) : texpr =
+  match te with
+  | TCall (func, args, ret_tipe) ->
+    TCall (substitute s func,
+           List.map (substitute s) args,
+           Unify.apply s ret_tipe) (* We can't stop after we hit the first match because we could be replacing TipeVar 3 with FunctionType (..., TipeVar 7), which could then need TipeVar 7 replaced more leftward in s. *)
+  | TBlock (texprs, t) ->
+    TBlock (List.map (substitute s) texprs, Unify.apply s t)
+  | TIf (if_, then_, else_, t) ->
+    TIf (substitute s if_,
+         substitute s then_,
+         substitute s else_,
+         Unify.apply s t)
+  | TVar (name, t) ->
+    TVar (name, Unify.apply s t)
+  | TAssignment (var_name, rvalue, t) ->
+    TAssignment (var_name, substitute s rvalue, Unify.apply s t)
+  | TFunction (name, arg_name_array, body, t) ->
+    TFunction (name, arg_name_array, substitute s body, Unify.apply s t)
+  | TExternalFunction (name, t) ->
+    TExternalFunction (name, Unify.apply s t)
+  | TBool _ | TDouble _ | TInt _ | TString _ -> te
+
+(** Use inference to turn an expression into a typed one. *)
+let infer_types (e : expr) : texpr =
   let annotated = annotate e in
   let constraints = collect [annotated] [] in
-  let resolutions = unify constraints in
-  apply resolutions annotated (or something)
-*)
+  let substitutions = Unify.unify constraints in
+  substitute substitutions annotated

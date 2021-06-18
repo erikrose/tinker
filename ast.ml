@@ -27,7 +27,7 @@ type expr =
   | Block of expr list
   | If of expr * expr * expr (** condition, then, else *)
   | Var of string (** var read *)
-  | Assignment of string * expr * tipe (** var write: name, value, type (until we have inference) *)
+  | Assignment of string * expr (** var write: name, value *)
 
   (** A function definition *)
   | Function of string * string array * expr (* name, args, body *)
@@ -45,7 +45,7 @@ type texpr =
   | TBool of bool
   | TDouble of float
   | TInt of int
-  | TString of string * tipe
+  | TString of string * tipe (* string literal *)
   | TCall of texpr * texpr list * tipe (* func, args, return tipe *)
   | TBlock of texpr list * tipe
   | TIf of texpr * texpr * texpr * tipe
@@ -110,7 +110,7 @@ let assert_no_unwritten_reads_in_scope exp =
       (* Evaluate each arg in the context of the vars provably written in
          previous args: *)
       List.fold_left (fun accum exp -> proven_written exp accum) written args
-    | Assignment (var_name, _, _) ->
+    | Assignment (var_name, _) ->
       String_set.add var_name written
     | Block exprs ->
       (* For each expr in the block, evaluate each in the context of the vars
