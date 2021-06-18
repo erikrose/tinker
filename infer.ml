@@ -2,14 +2,6 @@
 
 open Ast
 
-exception Error of string
-
-let rec last list =
-  match list with
-  | [] -> raise (Error "Tried to get the last item of an empty list.")
-  | [only] -> only
-  | _ :: rest -> last rest
-
 (** Apply type vars to the AST, which we can later derive constraints among and
     solve. *)
 let annotate (e : expr) : texpr =
