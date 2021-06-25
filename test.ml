@@ -34,12 +34,8 @@ let run_main the_module =
 (** Repro a bug wherein assignment didn't return a value, leading LLVM function
     validation to fail. *)
 let assignments_return_values test_ctxt =
-  let context = global_context () in
-  let the_module = create_module context "my singleton module" in
-  let builder = builder context in
-
   let main = main_function (Ast.Assignment ("x", Int(1), Ast.IntType)) in
-  ignore (Codegen.codegen_expr context the_module builder main)
+  ignore (compile main)
 
 let undefined_reads_in_if_branches_not_allowed test_ctxt =
   let body = Ast.Block([
@@ -50,10 +46,6 @@ let undefined_reads_in_if_branches_not_allowed test_ctxt =
   assert_raises (Exc.Undefined_var "a") (fun () -> Ast.assert_no_unwritten_reads_in_scope body)
 
 let inner_functions_raise_exception test_ctxt =
-  let context = global_context () in
-  let the_module = create_module context "my singleton module" in
-  let builder = builder context in
-
   let main = main_function (
               Ast.Function (
                 "sub",
@@ -65,7 +57,7 @@ let inner_functions_raise_exception test_ctxt =
               )
              ) in
   assert_raises (Codegen.Error "Inner functions are not allowed yet.")
-                (fun () -> Codegen.codegen_expr context the_module builder main)
+                (fun () -> compile main)
 
 let jit_works_for_tests test_ctxt =
   let result = run_main (compile (main_function (Ast.Int 33))) in
