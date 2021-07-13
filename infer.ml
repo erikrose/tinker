@@ -56,7 +56,7 @@ let annotate (e : expr) : texpr =
         try
           let t = List.assoc name bound_vars in TVar (name, t)
         with Not_found ->
-          try
+          try (* TODO: Go look for functions if you don't otherwise find a var, like codegen does. Or insert functions into the namespace properly. *)
             let t = Hashtbl.find free_vars name in TVar (name, t)
           with Not_found ->
             let t = new_type_var () in Hashtbl.add free_vars name t; TVar (name, t)
@@ -146,3 +146,5 @@ let infer_types (e : expr) : texpr =
   let constraints = collect [annotated] [] in
   let substitutions = Unify.unify constraints in
   substitute substitutions annotated
+
+(* TODO: Think about turning substitutions into a hash for speed. Meditate on whether it would be any faster. I think many things are O(|nodes in the texpr|) plus a little for recursing through the tipe (but I think those are typically gonna be very shallow). *)

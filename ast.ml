@@ -75,7 +75,7 @@ module String_set = Set.Make (String)
     written in the given expression. We do not recurse into further Functions
     because those are different scopes.
     @raise exc.UndefinedVar if we encounter a var read before it's written *)
-let assert_no_unwritten_reads_in_scope exp =
+let assert_no_unwritten_reads_in_scope texp =
   (** Return the set of vars we can prove has been written in the expression.
       @param written The set of variables we can prove have been written to
         already
@@ -85,15 +85,15 @@ let assert_no_unwritten_reads_in_scope exp =
       AST. But if we ever grow early returns (unless they lower to early returns
       in LLVM IR), break statements, or continue statements, we'll have to build
       a CFG and operate over that instead. *)
-  let rec proven_written exp written =
-    match exp with
-    | Bool _
-    | Double _
-    | Int _
-    | String _
-    | Function _
-    | ExternalFunction _ -> String_set.empty
-    | If (if_, then_, else_) ->
+  let rec proven_written texp written =
+    match texp with
+    | TBool _
+    | TDouble _
+    | TInt _
+    | TString _
+    | TFunction _
+    | TExternalFunction _ -> String_set.empty
+    | TIf (if_, then_, else_, _) ->
       let written_in_if = proven_written if_ written in
       let written_in_then = proven_written then_ written_in_if in
       let written_in_else = proven_written else_ written_in_if in
@@ -101,22 +101,22 @@ let assert_no_unwritten_reads_in_scope exp =
          the then and else blocks; we end up intersecting more than just the new
          vars from those blocks. *)
       String_set.inter written_in_then written_in_else
-    | Var name ->
+    | TVar (name, _) ->
       if String_set.mem name written then
         written
       else
         raise (Exc.Undefined_var name)
-    | Call (_, args) ->
+    | TCall (_, args, _) ->
       (* Evaluate each arg in the context of the vars provably written in
          previous args: *)
       List.fold_left (fun accum exp -> proven_written exp accum) written args
-    | Assignment (var_name, _) ->
+    | TAssignment (var_name, _, _) ->
       String_set.add var_name written
-    | Block exprs ->
+    | TBlock (exprs, _) ->
       (* For each expr in the block, evaluate each in the context of the vars
          provably written in the previous exprs: *)
       let all_written_vars accum cur_expr =
         proven_written cur_expr accum in
       List.fold_left all_written_vars written exprs
   in
-  ignore (proven_written exp String_set.empty)
+  ignore (proven_written texp String_set.empty)

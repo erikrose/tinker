@@ -5,10 +5,7 @@ let main_function exp =
   Ast.Function (
     "main",
     [| |],
-    IntType,
-    Ast.Internal (
-      exp
-    )
+    exp
    )
 
 (** Codegen an expression into a new module, and return the module. *)
@@ -16,7 +13,7 @@ let compile exp =
   let context = global_context () in
   let the_module = create_module context "my singleton module" in
   let builder = builder context in
-  ignore (Codegen.codegen_expr context the_module builder exp);
+  ignore (Codegen.codegen_expr context the_module builder (Infer.infer_types exp));
   the_module
 
 (** Run the no-args function called "main" from the given module. Return its
@@ -34,26 +31,24 @@ let run_main the_module =
 (** Repro a bug wherein assignment didn't return a value, leading LLVM function
     validation to fail. *)
 let assignments_return_values test_ctxt =
-  let main = main_function (Ast.Assignment ("x", Int(1), Ast.IntType)) in
+  let main = main_function (Ast.Assignment ("x", Int(1))) in
   ignore (compile main)
 
 let undefined_reads_in_if_branches_not_allowed test_ctxt =
   let body = Ast.Block([
-                        Ast.Assignment("x", Int(1), Ast.IntType);
-                        Ast.If(Ast.Var("x"), Ast.Assignment("a", Int(1), Ast.IntType), Ast.Assignment("q", Int(2), Ast.IntType));
+                        Ast.Assignment("x", Ast.Bool(true));
+                        Ast.If(Ast.Var("x"), Ast.Assignment("a", Int(1)), Ast.Assignment("q", Int(2)));
                         Ast.Var("a")
                        ]) in
-  assert_raises (Exc.Undefined_var "a") (fun () -> Ast.assert_no_unwritten_reads_in_scope body)
+  let tbody = Infer.infer_types body in
+  assert_raises (Exc.Undefined_var "a") (fun () -> Ast.assert_no_unwritten_reads_in_scope tbody)
 
 let inner_functions_raise_exception test_ctxt =
   let main = main_function (
               Ast.Function (
                 "sub",
                 [| |],
-                VoidType,
-                Ast.Internal (
-                  Ast.Block []
-                )
+                Ast.Int(3)
               )
              ) in
   assert_raises (Codegen.Error "Inner functions are not allowed yet.")
@@ -69,27 +64,22 @@ let global_functions_are_first_class test_ctxt =
   let builder = builder context in
 
   let other_func = Ast.Function (
-      "other", [| |], IntType,
-      Ast.Internal (
-        Ast.Int 44
-      )
+      "other", [| |],
+      Ast.Int 44
     ) in
   assert_equal !Codegen.is_generating_function false;
-  ignore (Codegen.codegen_expr context the_module builder (infer_types other_func));
+  ignore (Codegen.codegen_expr context the_module builder (Infer.infer_types other_func));
   assert_equal !Codegen.is_generating_function false;
   let main_func = Ast.Function (
-      "main", [| |], IntType,
-      Ast.Internal (
-        Ast.Block [
-          Ast.Assignment ("first_class_other_func",
-                          Ast.Var "other",
-                          Ast.FunctionType ([], Ast.IntType));
-          Ast.Call (Ast.Var "first_class_other_func",
-                    [])
-        ]
-      )
+      "main", [| |],
+      Ast.Block [
+        Ast.Assignment ("first_class_other_func",
+                        Ast.Var "other");
+        Ast.Call (Ast.Var "first_class_other_func",
+                  [])
+      ]
     ) in
-  ignore (Codegen.codegen_expr context the_module builder (infer_types main_func));
+  ignore (Codegen.codegen_expr context the_module builder (Infer.infer_types main_func));
 
   let result = run_main the_module in
   assert_equal result 44
