@@ -29,11 +29,50 @@ Everything is vague and loosely held at the moment. Consider this a sketch.
 * One of the aesthetic goals is to declutter. Syntax that is "for the machine" or "for the compiler" should be minimized. (This nudges us away from super-low-level applications, but perhaps a Sufficiently Advanced Compiler or special-purpose notation could keep those avenues open.) Declarations are minimal. GC exists. Exceptions rather than explicit error checking. Even whitespace over braces might be an example of this. The intention of minimizing clutter is to maximize the amount of mental space a developers can dedicate to their applications. Clutter should *not* be reduced past the point where it makes code harder to read.
 * You can't keep people from making a mess by force. (Style rule enforcement can make code *appear* clean but can't do much for comprehensibility beyond a surface polish.) But what we can do is give them the capability to *not* make a mess. Let them omit type declarations when they're just noise. Let them add them when they're informative. Letting humans, which are the only parties with perspective, decide what's important to state is the only path to the highest level of comprehensibility.
 
+## A Bit of Broader Language Design
+
+What I first care about when exposed to a new language—what determines the sort of software architecture you can do with it—are its structures: data structures, code structures (classes, functions, multimethods, modules). Design those first, as the rest is, relatively speaking, window dressing: syntax and loops and such will follow.
+
+Focus especially on data structures. When reading a program (and reading is where the majority of programming time is spent), nothing is more illuminating than data structures. "A program well-represented is 3/4 solved" and all that. The more the in-program representation of types and such ape the appearance of state-of-the-art documentation, the more we've succeeded.
+
+The overarching language-design strategy is to identify good things, figure out how to have them all, and, if that is impossible, figure out which things are in tension with each other and come up with the best tradeoff between them.
+
+### Data Structures
+
+#### Things I want
+
+* Comprehensiveness guarantees, a la `match`
+* Elaboration
+* Conciseness like ADTs
+
+Could marry comprehensiveness guarantees with multiple dispatch by defining a bunch of types, then saying "these types make up an enum" (thus creating the equivalent of variant types), then throw a fit if somebody defines a method on one of the types but not the rest. (Multimethods could hopefully take the place of match statements.) Basically, promote the variant constructors to the top level. This also solves the problem in OCaml where TFunction needs to take a FunctionType but the tightest we can constrain it to is texpr.
+
+    ```
+    type BoolType
+    type TipeVar {var:int}
+    type FunctionType {args:tipe[], return:tipe}
+    
+    enum tipe is
+        BoolType or TipeVar or FunctionType
+
+    fun show t:tipe
+        
+    ```
+
+* Lists of homogeneous things—not just all of the same type but even of just a common interface, like Stringable.
+* Maps of some kind.
+* Structs. Something to let us compose a bunch of fields into a single thing. (For example, we could use these to implement a cons cell, and the user wouldn't have to be bothered about the ptr field.)
+* Struct elaboration somehow. Having a way to say "Yes, everything in that struct, plus this thing." Subclasses do that, and I miss it in OCaml, where its absence leads to a lot of repetition: for example, AST types for the parser and then those-but-with-types for the type annotator. Is composition enough? I feel like struct elaboration might have a nice symmetry with multimethods (being function elaboration), both in the abstract and in the concrete case of a multimethod having specializations both on the original struct and on elaborations of it. OTOH, maybe function elaboration is just one function calling another.
+* Classes? Maybe. What are they good for?
+    * Abstract algos (acetates). Could also be done with structs with default values. And some concept of “this”. That may basically be a class. Is the Turtles-style calling convention in tension with classes? Does it become impossible to get ahold of “this”?
+    * Encapsulation. This is important in that it makes programs easier to reason about: as a caller, you don't have to think about private things, and you don't have to worry some other caller has screwed them up.
+* Mutability: always, rarely, never?
+
 ## Types
 ### Possibilities
-* No classes, just typed structs (or interfaces?) and type- (or interface?)-dispatched functions
+* No classes, just typed structs (or interfaces?) and type- (or interface?)-dispatched functions. Abstract algorithms, one motivation for acetate-like inheritance, can be implemented by specializing methods (or even multimethods, to improve upon the class-based approach) on subtypes and making sure the most specialized method that matches is always chosen.
 * ADTs
-* Generics through compile-time functors. Or maybe Hindley-Milner makes that pointless.
+* Generics through compile-time functors. Though I guess Hindley-Milner's polymorphism makes that pointless.
 
 ### Deciding among possibilities
 * I'd like for things to be retrofittable. IOW, be able to attach new routines to a stdlib type without having to stick new interface declarations in the stdlib.
@@ -207,4 +246,6 @@ To compile and run "Hello, world", run `make run`.
     If we have exceptions, the `catch` clauses should probably look like `match` clauses and be able to pattern-match and destructure thrown values. A thrown value can be any old object with a constructor: anything that can be matched against.
 
     For applications that cannot tolerate exceptions, we can have a `no_except` signifier applied to a function that cues the compiler to throw an error if any exception that could be raised within a function is not caught.
+    
+    typed effects or something. https://github.com/ocamllabs/ocaml-effects-tutorial
 * Think about separate compilation. This will be in tension with global type inference.
