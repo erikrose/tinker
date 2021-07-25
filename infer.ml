@@ -63,7 +63,7 @@ let annotate (e : expr) : texpr =
       end
     | Assignment (var_name, value) ->
       let tvalue = annotate_core bound_vars value in
-      TAssignment (var_name, tvalue, tipe_of tvalue)
+      TAssignment (var_name, tvalue, tipe_of tvalue) (* TODO: Shouldn't these be added to bound_vars somehow so inner functions--or, heck, later var references--can see them? *)
     | Function (name, arg_name_array, body) ->
       let arg_names = Array.to_list arg_name_array in
       (* Let each arg_name be a new type var: *)

@@ -58,6 +58,7 @@ let jit_works_for_tests test_ctxt =
   let result = run_main (compile (main_function (Ast.Int 33))) in
   assert_equal result 33
 
+(*
 let global_functions_are_first_class test_ctxt =
   let context = global_context () in
   let the_module = create_module context "my singleton module" in
@@ -83,6 +84,7 @@ let global_functions_are_first_class test_ctxt =
 
   let result = run_main the_module in
   assert_equal result 44
+*)
 
 let suite =
 "suite" >:::
@@ -91,7 +93,9 @@ let suite =
     "When the branches of an `if` read an undefined var, raise an error." >:: undefined_reads_in_if_branches_not_allowed;
     "Inner functions are disallowed for now." >:: inner_functions_raise_exception;
     "JITting test harness works" >:: jit_works_for_tests;
+(*
     "Global functions are first-class." >:: global_functions_are_first_class;
+*)
   ]
 
 let () =
