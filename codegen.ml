@@ -45,9 +45,9 @@ let rec assignments_in node : var_name_and_tipe list =
     | Ast.TFunction _ (* TODO: Figure out what the scope of function names is and how functions are to be referenced. Perhaps we should count a declared inner function as a local var and add it to the local scope. *)
     | Ast.TExternalFunction _
     | Ast.TVar _ -> []
-    | Ast.TCall (name, args, t) -> List.concat (List.map assignments_in args)
-    | Ast.TBlock (exprs, t) -> List.concat (List.map assignments_in exprs)
-    | Ast.TIf (if_, then_, else_, t) -> List.concat [assignments_in if_;
+    | Ast.TCall (_, args, _) -> List.concat (List.map assignments_in args)
+    | Ast.TBlock (exprs, _) -> List.concat (List.map assignments_in exprs)
+    | Ast.TIf (if_, then_, else_, _) -> List.concat [assignments_in if_;
                                                      assignments_in then_;
                                                      assignments_in else_]
     | Ast.TAssignment (var_name, value, t) -> {name=var_name; tipe_=t} :: assignments_in value
@@ -72,13 +72,13 @@ let rec codegen_expr context the_module builder exp =
   | Ast.TBool b -> const_int (i1_type context) (if b then 1 else 0)
   | Ast.TDouble n -> const_float (double_type context) n
   | Ast.TInt n -> const_int (i64_type context) n
-  | Ast.TCall (func_expr, args, t) ->
+  | Ast.TCall (func_expr, args, _) ->
     let func_ptr = codegen_expr context the_module builder func_expr in
     let genned_args = List.map (codegen_expr context the_module builder) args in
     build_call func_ptr (Array.of_list genned_args) "" builder
-  | Ast.TString (str, t) ->
+  | Ast.TString (str, _) ->
     build_global_stringptr str "" builder
-  | Ast.TBlock (exprs, t) ->
+  | Ast.TBlock (exprs, _) ->
     (* The value of a block is the value of its last evaluated expression. *)
     let last_expr_value _ cur_expr =
       codegen_expr context the_module builder cur_expr
@@ -86,7 +86,7 @@ let rec codegen_expr context the_module builder exp =
     (* This null value will do for now, but it might not be the final one we want: *)
     let null_value = const_null (void_type context) in
     List.fold_left last_expr_value null_value exprs
-  | Ast.TAssignment (name, value, t) ->
+  | Ast.TAssignment (name, value, _) ->
     (* Codegen the value expr, then store it at the address of `name` as given
        by the hash table. The hash table also gives the type so we know how
        many bytes to copy. *)
@@ -95,7 +95,7 @@ let rec codegen_expr context the_module builder exp =
     (* Store and return the assigned value: *)
     ignore (build_store genned_value stack_slot builder);
     genned_value
-  | Ast.TVar (name, t) ->
+  | Ast.TVar (name, _) ->
     begin
       try
         let (stack_slot, _) = Hashtbl.find vars name in
@@ -106,7 +106,7 @@ let rec codegen_expr context the_module builder exp =
         | Some global -> global
         | None -> raise (UndefinedVariable name)
     end
-  | Ast.TIf (condition, then_, else_, t) ->
+  | Ast.TIf (condition, then_, else_, _) ->
     (* Generate something along these lines. It's very hard to understand the
        if-generation code without this as a reference.
 
@@ -177,7 +177,7 @@ let rec codegen_expr context the_module builder exp =
     position_at_end merge_bb builder;
 
     phi
-  | Ast.TFunction (name, arg_names, body, t) ->
+  | Ast.TFunction (name, _, body, t) ->
     let (arg_tipes, ret_tipe) = decomposed_function_tipe t in
     if !is_generating_function then
       begin

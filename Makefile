@@ -25,23 +25,16 @@ compile.native: *.ml
 	ocamlbuild -pkgs llvm,llvm.analysis compile.native
 
 clean:
-	rm -rf _build compile.native build a.out test.native test_unify.native
+	rm -rf _build compile.native build a.out
 
-test: _build/test.native
-	_build/test.native -ci true
+test:
+	dune build test.exe
+	_build/default/test.exe -ci true
 
-_build/test.native: *.ml
-	ocamlbuild -pkgs ctypes,llvm,llvm.analysis,llvm.executionengine,ounit2 test.native
-
-# Test unification:
-test_unify:
-	dune build test_unify.exe
-	_build/default/test_unify.exe -ci true
-
-debug_test_unify:
-	dune build test_unify.bc
+debug_test:
+	dune build test.bc
 	# Do "break @dune__exe__Infer 76" to set a breakpoint. Dune mangles names.
 	# OUnit2 somehow keeps breakpoints from working, so call the test routine directly rather than running run_test_tt_main.
-	ocamldebug _build/default/test_unify.bc
+	ocamldebug _build/default/test.bc
 
-.PHONY: all clean run build test test_unify
+.PHONY: all clean run build test debug_test

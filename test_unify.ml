@@ -5,116 +5,110 @@ open Ast
 let assert_annotate_equal annotated ast = 
   assert_equal annotated (Infer.annotate ast) ~printer:show_texpr
 
-(** Just see if we can assign some simple type vars to things. *)
-let annotate_bools_doubles_ifs_functions _ =
-  let ast = Function (
-      "main",
-      [| |],
-      If (
-        Bool true,
-        Double 1.2,
-        Double 3.4
-      )
-  ) in
-  let typed = TFunction (
-      "main",
-      [| |],
-      TIf (
-        TBool true,
-        TDouble 1.2,
-        TDouble 3.4,
-        DoubleType
-      ),
-      FunctionType ([], DoubleType)
-  ) in
-  assert_annotate_equal typed ast
+let tests = "Unification tests" >::: [
+  "Ifs and function return types annotate correctly. Doubles and bools work, too." >:: (fun _ -> (
+    (* Just see if we can assign some simple type vars to things. *)
+    let ast = Function (
+        "main",
+        [| |],
+        If (
+          Bool true,
+          Double 1.2,
+          Double 3.4
+        )
+    ) in
+    let typed = TFunction (
+        "main",
+        [| |],
+        TIf (
+          TBool true,
+          TDouble 1.2,
+          TDouble 3.4,
+          DoubleType
+        ),
+        FunctionType ([], DoubleType)
+    ) in
+    assert_annotate_equal typed ast
+  ));
 
-let annotate_strings _ =
-  let ast = String "smoobar" in
-  let typed = TString ("smoobar", StringType 7) in
-  assert_annotate_equal typed ast
+  "Strings annotate." >:: (fun _ -> (
+    let ast = String "smoobar" in
+    let typed = TString ("smoobar", StringType 7) in
+    assert_annotate_equal typed ast
+  ));
 
-let annotate_calls _ =
-  let ast = Call (
-    Var "someFunc",
-    [Int 1]
-  ) in
-  let expected = TCall (
-    TVar ("someFunc", TipeVar 1),
-    [TInt 1],
-    TipeVar 2
-  ) in
-  assert_annotate_equal expected ast
+  "Calls to undefined functions annotate properly. Also, the new-free-var branch of var lookup works." >:: (fun _ -> (
+    let ast = Call (
+      Var "someFunc",
+      [Int 1]
+    ) in
+    let expected = TCall (
+      TVar ("someFunc", TipeVar 1),
+      [TInt 1],
+      TipeVar 2
+    ) in
+    assert_annotate_equal expected ast
+  ));
 
-let annotate_block _ =
-  let ast = Block [Int 4; Int 5; Bool true] in
-  let typed = TBlock ([TInt 4; TInt 5; TBool true], BoolType) in
-  assert_annotate_equal typed ast
+  "The type of a block is the type of its last expr." >:: (fun _ -> (
+    let ast = Block [Int 4; Int 5; Bool true] in
+    let typed = TBlock ([TInt 4; TInt 5; TBool true], BoolType) in
+    assert_annotate_equal typed ast
+  ));
 
 (* Ifs are self-evidently correct. *)
 (* It's hard to test Vars to any extent further than "it doesn't crash" until we collect(). *)
 (* Assignments are self-evidently correct. *)
 
-let annotate_function_returning_bound_var _ =
-  let ast = Function (
-    "main",
-    [| "a" |],
-    Var "a"
-  ) in
-  let expected = TFunction (
-    "main",
-    [| "a" |],
-    TVar ("a", TipeVar 1),
-    FunctionType ([TipeVar 1], TipeVar 1)
-  ) in
-  assert_annotate_equal expected ast
+  "Types of bound vars are looked up successfully." >:: (fun _ -> (
+    let ast = Function (
+      "main",
+      [| "a" |],
+      Var "a"
+    ) in
+    let expected = TFunction (
+      "main",
+      [| "a" |],
+      TVar ("a", TipeVar 1),
+      FunctionType ([TipeVar 1], TipeVar 1)
+    ) in
+    assert_annotate_equal expected ast
+  ));
 
-let collect_call _ =
-  let annotated = TCall (
-    TVar ("repeat", TipeVar 1),
-    [TString ("foo", StringType 3); TInt 9],
-    TipeVar 2
-  ) in
-  assert_equal [TipeVar 1,
-                FunctionType ([StringType 3; IntType], TipeVar 2)]
-               (Infer.collect [annotated] [])
+  "The type of a call is constrained to agree with the types of its args and return value." >:: (fun _ -> (
+    let annotated = TCall (
+      TVar ("repeat", TipeVar 1),
+      [TString ("foo", StringType 3); TInt 9],
+      TipeVar 2
+    ) in
+    assert_equal [TipeVar 1,
+                  FunctionType ([StringType 3; IntType], TipeVar 2)]
+                 (Infer.collect [annotated] [])
+  ));
 
-let collect_if _ =
-  let annotated = TIf (
-    TInt 8, (* cond *)
-    TVar ("thenExpr", TipeVar 1),
-    TVar ("elseExpr", TipeVar 2),
-    TipeVar 3
-  ) in
-  (* Of course, the following wouldn't successfully unify, but it more
-     unambiguously demonstrates that annotation is working than would repeating
-     TipeVars: *)
-  assert_equal [(IntType, BoolType); 
-                (TipeVar 1, TipeVar 2);
-                (TipeVar 1, TipeVar 3)]
-               (Infer.collect [annotated] [])
+  "Proper type constraints for ifs are generated." >:: (fun _ -> (
+    let annotated = TIf (
+      TInt 8, (* cond *)
+      TVar ("thenExpr", TipeVar 1),
+      TVar ("elseExpr", TipeVar 2),
+      TipeVar 3
+    ) in
+    (* Of course, the following wouldn't successfully unify, but it more
+       unambiguously demonstrates that annotation is working than would repeating
+       TipeVars: *)
+    assert_equal [(IntType, BoolType); 
+                  (TipeVar 1, TipeVar 2);
+                  (TipeVar 1, TipeVar 3)]
+                 (Infer.collect [annotated] [])
+  ));
 
-(** Inferrer has to infer the type of the 7, percolate that up to the
-    Assignment, then have the unifier say "Yep, they're the same, so they
-    unify". *)
-let test_infer_types _ =
-  let ast = Assignment ("foo", Int 7) in
-  assert_equal (TAssignment ("foo", TInt 7, IntType)) (Infer.infer_types ast)
+  "Smoketest inference integration." >:: (fun _ -> (
+    (* Inferrer has to infer the type of the 7, percolate that up to the
+        Assignment, then have the unifier say "Yep, they're the same, so they
+        unify". *)
+    let ast = Assignment ("foo", Int 7) in
+    assert_equal (TAssignment ("foo", TInt 7, IntType)) (Infer.infer_types ast)
+  ));
+]
 
-(* Then maybe test an If whose branches differ in type and make sure that doesn't unify. *)
-
-let suite =
-"suite" >:::
-  [
-    "Ifs and function return types annotate correctly. Doubles and bools work, too." >:: annotate_bools_doubles_ifs_functions;
-    "Strings annotate." >:: annotate_strings;
-    "Calls to undefined functions annotate properly. Also, the new-free-var branch of var lookup works." >:: annotate_calls;
-    "The type of a block is the type of its last expr." >:: annotate_block;
-    "Types of bound vars are looked up successfully." >:: annotate_function_returning_bound_var;
-    "The type of a call is constrained to agree with the types of its args and return value." >:: collect_call;
-    "Proper type constraints for ifs are generated." >:: collect_if;
-    "Smoketest inference integration." >:: test_infer_types;
-  ]
-
-let () =
-  run_test_tt_main suite
+(* TODO: Maybe test an If whose branches differ in type and make sure that doesn't unify. *)
