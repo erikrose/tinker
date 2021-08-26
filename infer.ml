@@ -59,17 +59,32 @@ let annotate (e : expr) : texpr =
           try (* TODO: Go look for functions if you don't otherwise find a var, like codegen does. Or insert functions into the namespace properly. *)
             let t = Hashtbl.find free_vars name in TVar (name, t)
           with Not_found ->
-            let t = new_type_var () in Hashtbl.add free_vars name t; TVar (name, t)
+            let t = new_type_var () in
+            Hashtbl.add free_vars name t; TVar (name, t)
       end
     | Assignment (var_name, value) ->
-      let tvalue = annotate_core bound_vars value in
-      TAssignment (var_name, tvalue, tipe_of tvalue) (* TODO: Shouldn't these be added to bound_vars somehow so inner functions--or, heck, later var references--can see them? *)
+      let right_type = annotate_core bound_vars value in
+      (* Apply the typing rule "Assignments have the type of their lvalue's
+         var."
+
+         Here in annotate(), we say an assignment's type is whatever its lvalue
+         var's is, not whatever its rvalue's is. The declaration of equivalence
+         between the types is done later by collect(). This serves to express
+         equivalences between reads and writes to a var; they end up both being
+         TipeVar 7 rather than the Var being a TipeVar and the Assignment `x =
+         3` being, for example, IntType. *)
+      let left_type = List.assoc var_name bound_vars in
+      TAssignment (var_name, right_type, left_type)
     | Function (name, arg_name_array, body) ->
       let arg_names = Array.to_list arg_name_array in
       (* Let each arg_name be a new type var: *)
       let arg_tipes = List.map (fun _ -> new_type_var ()) arg_names in
       let arg_names_and_tipes = Utils.zip arg_names arg_tipes in
-      let tbody = annotate_core (arg_names_and_tipes @ bound_vars) body in (* TODO: Add function name itself to scope. Or dispense with functions having names, and figure out how to get main() called (and, later, how to get Tinker functions linkable from other languages). *)
+      (* Also add all this function's local vars to the bound_vars. Locals are
+         just like args with no incoming value; they can push on and pop off at
+         the same time: *)
+      let assigned_vars_and_tipes = List.map (fun name -> (name, new_type_var ())) (assignments_in body) in
+      let tbody = annotate_core (arg_names_and_tipes @ assigned_vars_and_tipes @ bound_vars) body in (* TODO: Add function name itself to scope. Or dispense with functions having names, and figure out how to get main() called (and, later, how to get Tinker functions linkable from other languages). *)
       TFunction (name, arg_name_array, tbody, FunctionType (arg_tipes, tipe_of tbody))
     | ExternalFunction (name, function_tipe) ->
       TExternalFunction (name, function_tipe)
@@ -105,10 +120,9 @@ let rec collect (texprs : texpr list) (unifying_pairs : Unify.constraints) : Uni
                 whole `if` expression: *)
              (tipe_of then_, tipe_) ::
              unifying_pairs)
-  | TAssignment (_, rvalue, _) :: rest ->
-    (* The typing rule "an assigned var has the type of its rvalue" is applied
-       by annotate(). *)
-    collect (rvalue :: rest) unifying_pairs
+  | TAssignment (_, rvalue, var_type) :: rest ->
+    (* Apply the typing rule "an assigned var has the type of its rvalue": *)
+    collect (rvalue :: rest) ((tipe_of rvalue, var_type) :: unifying_pairs)
   | TFunction (_, _, body, _) :: rest ->
     (* Arg names are already unified with occurrences of them in the function
        body, via annotate. *)

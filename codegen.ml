@@ -27,31 +27,6 @@ let rec llvm_type context ast_tipe =
     pointer_type (function_type (llvm_type context ret_tipe) (Array.of_list arg_llvm_types))
   | TipeVar _ -> raise (Error "A type variable was still around in code I was asked to generate. It should have been resolved into a concrete type by now, either by inference or by monomorphization.")
 
-type var_name_and_tipe = {name:string; tipe_:Ast.tipe}
-
-(** Return a List of var names and tipes for each assigned var name in the
-    scope of an expression.
-
-    If the expression contains a function definition, we don't recurse into
-    that; that would be a new scope, so the assignments therein would belong to
-    it. *)
-let rec assignments_in node : var_name_and_tipe list =
-  (* TODO: Don't concretize the returned list. *)
-  match node with
-    | Ast.TBool _
-    | Ast.TDouble _
-    | Ast.TInt _
-    | Ast.TString _
-    | Ast.TFunction _ (* TODO: Figure out what the scope of function names is and how functions are to be referenced. Perhaps we should count a declared inner function as a local var and add it to the local scope. *)
-    | Ast.TExternalFunction _
-    | Ast.TVar _ -> []
-    | Ast.TCall (_, args, _) -> List.concat (List.map assignments_in args)
-    | Ast.TBlock (exprs, _) -> List.concat (List.map assignments_in exprs)
-    | Ast.TIf (if_, then_, else_, _) -> List.concat [assignments_in if_;
-                                                     assignments_in then_;
-                                                     assignments_in else_]
-    | Ast.TAssignment (var_name, value, t) -> {name=var_name; tipe_=t} :: assignments_in value
-
 (** Assert a type is a FunctionType, and break it into arg types and return
     type. *)
 let decomposed_function_tipe t =
@@ -200,15 +175,15 @@ let rec codegen_expr context the_module builder exp =
 
     (** If the given var isn't already allocated, gen the alloca, and add an
         entry to the symbol table: *)
-    let add_local_var (name_and_tipe:var_name_and_tipe) =
-      let {name=var_name; tipe_=var_tipe} = name_and_tipe in
+    let add_local_var (name_and_tipe:Ast.var_name_and_tipe) =
+      let {Ast.name=var_name; tipe_=var_tipe} = name_and_tipe in
       match Hashtbl.find_opt vars var_name with
       | None ->
         let stack_slot = build_alloca (llvm_type context var_tipe) var_name builder in
         Hashtbl.replace vars var_name (stack_slot, var_tipe)
       | Some _ -> ()
     in
-    List.iter add_local_var (assignments_in body);
+    List.iter add_local_var (Ast.assignments_and_types_in body);
 
     (* Codegen body: *)
     let ret_val = codegen_expr context the_module builder body in

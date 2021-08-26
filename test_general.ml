@@ -37,12 +37,26 @@ let tests = "General tests" >::: [
   ));
 
   "When the branches of an `if` read an undefined var, raise an error." >:: (fun _ -> (
-    let body = Ast.Block([
-                          Ast.Assignment("x", Ast.Bool(true));
-                          Ast.If(Ast.Var("x"), Ast.Assignment("a", Int(1)), Ast.Assignment("q", Int(2)));
-                          Ast.Var("a")
-                         ]) in
-    let tbody = Infer.infer_types body in
+    let func = Ast.Function (
+      "foo",
+      [| |],
+      Ast.Block (
+        [
+          Ast.Assignment ("x", Ast.Bool true);
+          Ast.If (
+            Ast.Var "x",
+            Ast.Assignment("a", Int 1),
+            Ast.Assignment("q", Int 2)
+          );
+          Ast.Var "a"
+        ]
+      )
+    ) in
+    let tfunc = Infer.infer_types func in
+    let tbody = match tfunc with
+      | TFunction (_, _, body, _) -> body
+      | _ -> assert_failure "Something went terribly wrong."
+    in
     assert_raises (Exc.Undefined_var "a") (fun () -> Ast.assert_no_unwritten_reads_in_scope tbody)
   ));
 

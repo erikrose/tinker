@@ -120,3 +120,51 @@ let assert_no_unwritten_reads_in_scope texp =
       List.fold_left all_written_vars written exprs
   in
   ignore (proven_written texp String_set.empty)
+
+type var_name_and_tipe = {name:string; tipe_:tipe}
+
+(** Return a List of var names and tipes for each assigned var name in the
+    scope of an expression.
+
+    If the expression contains a function definition, we don't recurse into
+    that; that would be a new scope, so the assignments therein would belong to
+    it. *)
+let rec assignments_and_types_in texp : var_name_and_tipe list =
+  (* TODO: Don't concretize the returned list. *)
+  match texp with
+    | TBool _
+    | TDouble _
+    | TInt _
+    | TString _
+    | TFunction _ (* TODO: Figure out what the scope of function names is and how functions are to be referenced. Perhaps we should count a declared inner function as a local var and add it to the local scope. *)
+    | TExternalFunction _
+    | TVar _ -> []
+    | TCall (_, args, _) -> List.concat (List.map assignments_and_types_in args)
+    | TBlock (exprs, _) -> List.concat (List.map assignments_and_types_in exprs)
+    | TIf (if_, then_, else_, _) -> List.concat [assignments_and_types_in if_;
+                                                 assignments_and_types_in then_;
+                                                 assignments_and_types_in else_]
+    | TAssignment (var_name, value, t) -> {name=var_name; tipe_=t} :: assignments_and_types_in value
+
+(** Return a List of var names for each assigned var name in the scope of an
+    expression.
+
+    If the expression contains a function definition, we don't recurse into
+    that; that would be a new scope, so the assignments therein would belong to
+    it. *)
+let rec assignments_in exp : string list =
+  (* TODO: Don't concretize the returned list. *)
+  match exp with
+    | Bool _
+    | Double _
+    | Int _
+    | String _
+    | Function _ (* TODO: Figure out what the scope of function names is and how functions are to be referenced. Perhaps we should count a declared inner function as a local var and add it to the local scope. *)
+    | ExternalFunction _
+    | Var _ -> []
+    | Call (_, args) -> List.concat (List.map assignments_in args)
+    | Block exprs -> List.concat (List.map assignments_in exprs)
+    | If (if_, then_, else_) -> List.concat [assignments_in if_;
+                                             assignments_in then_;
+                                             assignments_in else_]
+    | Assignment (var_name, value) -> var_name :: assignments_in value

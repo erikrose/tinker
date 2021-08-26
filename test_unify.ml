@@ -60,6 +60,35 @@ let tests = "Unification tests" >::: [
 (* It's hard to test Vars to any extent further than "it doesn't crash" until we collect(). *)
 (* Assignments are self-evidently correct. *)
 
+  "Later var refs can see vars made by Assignments." >:: (fun _ -> (
+    (* This allays my doubts that assignments are properly added to bound_vars
+       in annotate. *)
+    let ast = Function (
+      "foo",
+      [| |],
+      Block [
+        Assignment ("x", Int 7);
+        Var "x"
+      ]
+    ) in
+    let typed = TFunction (
+      "foo",
+      [| |],
+      TBlock (
+        [
+          TAssignment ("x", TInt 7, IntType);
+          TVar ("x", IntType)
+        ],
+        IntType
+      ),
+      FunctionType (
+        [],
+        IntType
+      )
+    ) in
+    assert_equal typed (Infer.infer_types ast) ~printer:show_texpr
+  ));
+
   "Types of bound vars are looked up successfully." >:: (fun _ -> (
     let ast = Function (
       "main",
@@ -100,14 +129,6 @@ let tests = "Unification tests" >::: [
                   (TipeVar 1, TipeVar 2);
                   (TipeVar 1, TipeVar 3)]
                  (Infer.collect [annotated] [])
-  ));
-
-  "Smoketest inference integration." >:: (fun _ -> (
-    (* Inferrer has to infer the type of the 7, percolate that up to the
-        Assignment, then have the unifier say "Yep, they're the same, so they
-        unify". *)
-    let ast = Assignment ("foo", Int 7) in
-    assert_equal (TAssignment ("foo", TInt 7, IntType)) (Infer.infer_types ast)
   ));
 ]
 
