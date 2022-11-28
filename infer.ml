@@ -40,6 +40,7 @@ let annotate (e : expr) : texpr =
     | Block exprs ->
       let texprs = List.map (annotate_core bound_vars) exprs in
       TBlock (texprs, tipe_of (Utils.last texprs))
+      (* TODO: Raise a nicer exception if a block is empty. Maybe move that to the parser when it exists. *)
     | If (if_, then_, else_) ->
       let tthen = annotate_core bound_vars then_ in
       TIf (annotate_core bound_vars if_,

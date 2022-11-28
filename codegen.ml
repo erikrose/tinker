@@ -58,7 +58,9 @@ let rec codegen_expr context the_module builder exp =
     let last_expr_value _ cur_expr =
       codegen_expr context the_module builder cur_expr
     in
-    (* This null value will do for now, but it might not be the final one we want: *)
+    (* This null value will do for now, but it might not be the final one we
+       want. For that matter, we don't allow empty blocks, so does it really
+       matter? *)
     let null_value = const_null (void_type context) in
     List.fold_left last_expr_value null_value exprs
   | Ast.TAssignment (name, value, _) ->
@@ -166,7 +168,7 @@ let rec codegen_expr context the_module builder exp =
     let bb = append_block context "entry" the_function in
     position_at_end bb builder;
 
-    Ast.assert_no_unwritten_reads_in_scope body;
+    Ast.assert_no_unwritten_reads_in_scope body;  (* TODO: Make sure we can have a function which reads a global or a var from a surrounding function. *)
 
     (* TODO: What happens when we encounter an inner function? Don't screw up. Start a new Hashtbl (or go with a COW tree). Watch your block position. I guess generate all funcs as globals with munged names. LLVM IR does expect func ptrs as params to all call instructions, so we could just pass func ptrs around. *)
 

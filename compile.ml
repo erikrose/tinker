@@ -13,6 +13,7 @@ let main () =
       Int 44
     ) in
   ignore (Codegen.codegen_expr context the_module builder (Infer.infer_types other_func));
+
   let main_func = Ast.Function (
       "main", [| |],
       Ast.Block [
