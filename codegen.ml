@@ -1,42 +1,69 @@
 open Llvm
 open Llvm_analysis
 
+exception UndefinedVariable of string
 exception Error of string
 
 (** For the function currently being generated, a map of var name to memory
     location and type. This will become a stack of hash tables once we support
     nested functions. *)
 let vars:(string, (llvalue * Ast.tipe)) Hashtbl.t = Hashtbl.create ~random:true 20
+(* TODO: Make this module reentrant; these globals have to go. *)
 
-let rec codegen_expr context the_module builder body =
-  match body with
-  | Ast.Double n -> const_float (double_type context) n
-  | Ast.Int n -> const_int (i64_type context) n
-  | Ast.Call (callee, args) ->
-    (* Look up the name in the module table. *)
-    let callee =
-      match lookup_function callee the_module with
-      | Some callee -> callee
-      | None -> raise (Error "unknown function referenced")
-    in
-    let params = params callee in
+(** Flag saying whether a function is currently being codegenned *)
+let is_generating_function:bool ref = ref false
 
-    (* If argument mismatch error: *)
-    if Array.length params <> List.length args then
-      raise (Error "incorrect # arguments passed");
+(** Return the LLVM type corresponding to one of our AST "tipes". *)
+let rec llvm_type context ast_tipe =
+  match ast_tipe with
+  | Ast.BoolType -> i1_type context
+  | Ast.DoubleType -> double_type context
+  | IntType -> i64_type context (* TODO: make portable *)
+  | StringType length -> array_type (i8_type context) length
+  | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
+  | VoidType -> void_type context
+  | FunctionType (arg_tipes, ret_tipe) ->
+    let arg_llvm_types = List.map (llvm_type context) arg_tipes in
+    pointer_type (function_type (llvm_type context ret_tipe) (Array.of_list arg_llvm_types))
+  | TipeVar _ -> raise (Error "A type variable was still around in code I was asked to generate. It should have been resolved into a concrete type by now, either by inference or by monomorphization.")
+
+(** Assert a type is a FunctionType, and break it into arg types and return
+    type. *)
+let decomposed_function_tipe t =
+  match t with
+    | Ast.FunctionType (arg_tipes, ret_tipe) -> (arg_tipes, ret_tipe)
+    | _ -> raise (Error "Function had a non-function type.")
+
+let rec codegen_expr context the_module builder exp =
+  let codegen_declaration name arg_tipes ret_tipe =
+    (* Make the function type: double(double, double) etc. *)
+    let llvm_arg_types = Array.init (Array.length arg_tipes) (fun i -> llvm_type context arg_tipes.(i)) in
+    (* Return and arg types: *)
+    let signature = function_type (llvm_type context ret_tipe) llvm_arg_types in
+    declare_function name signature the_module
+    (* TODO: Error if a function gets redeclared. *)
+  in
+  match exp with
+  | Ast.TBool b -> const_int (i1_type context) (if b then 1 else 0)
+  | Ast.TDouble n -> const_float (double_type context) n
+  | Ast.TInt n -> const_int (i64_type context) n
+  | Ast.TCall (func_expr, args, _) ->
+    let func_ptr = codegen_expr context the_module builder func_expr in
     let genned_args = List.map (codegen_expr context the_module builder) args in
-    build_call callee (Array.of_list genned_args) "" builder
-  | Ast.String str ->
+    build_call func_ptr (Array.of_list genned_args) "" builder
+  | Ast.TString (str, _) ->
     build_global_stringptr str "" builder
-  | Ast.Block exprs ->
+  | Ast.TBlock (exprs, _) ->
     (* The value of a block is the value of its last evaluated expression. *)
     let last_expr_value _ cur_expr =
       codegen_expr context the_module builder cur_expr
     in
-    (* This null value will do for now, but it might not be the final one we want: *)
+    (* This null value will do for now, but it might not be the final one we
+       want. For that matter, we don't allow empty blocks, so does it really
+       matter? *)
     let null_value = const_null (void_type context) in
     List.fold_left last_expr_value null_value exprs
-  | Ast.Assignment (name, value) ->
+  | Ast.TAssignment (name, value, _) ->
     (* Codegen the value expr, then store it at the address of `name` as given
        by the hash table. The hash table also gives the type so we know how
        many bytes to copy. *)
@@ -45,10 +72,18 @@ let rec codegen_expr context the_module builder body =
     (* Store and return the assigned value: *)
     ignore (build_store genned_value stack_slot builder);
     genned_value
-  | Ast.Var name ->
-    let (stack_slot, _) = Hashtbl.find vars name in
-    build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
-  | Ast.If (condition, then_, else_) ->
+  | Ast.TVar (name, _) ->
+    begin
+      try
+        let (stack_slot, _) = Hashtbl.find vars name in
+        build_load stack_slot name builder (* We actually use the var name as the destination SSA name. *)
+      with Not_found ->
+        (* TODO: Once type inference is in place, use lookup_function for things typed as functions and lookup_global for all other globals. *)
+        match lookup_function name the_module with (* TODO: This prohibits forward refs. It raises if the global hasn't been added to the module yet. *)
+        | Some global -> global
+        | None -> raise (UndefinedVariable name)
+    end
+  | Ast.TIf (condition, then_, else_, _) ->
     (* Generate something along these lines. It's very hard to understand the
        if-generation code without this as a reference.
 
@@ -70,7 +105,7 @@ let rec codegen_expr context the_module builder body =
          ret i64 %1 *)
 
     let condition_value = codegen_expr context the_module builder condition in
-    let int_zero = const_null (i64_type context) in
+    let int_zero = const_null (i1_type context) in
     let comparison = build_icmp Icmp.Ne condition_value int_zero "ifcond" builder in
 
     (* Save old BB, and start a new one for the "then" expr: *)
@@ -119,65 +154,38 @@ let rec codegen_expr context the_module builder body =
     position_at_end merge_bb builder;
 
     phi
-
-(** Return the LLVM type corresponding to one of our AST "tipes". *)
-let llvm_type ast_type context =
-  match ast_type with
-  | Ast.DoubleType -> double_type context
-  | IntType -> i64_type context (* TODO: make portable *)
-  | StringType length -> array_type (i8_type context) length
-  | StringPtrType -> pointer_type (i8_type context) (* Does it matter that this doesn't know the string is an array? *)
-  | VoidType -> void_type context
-
-(** Return a List of the assigned var names in an expression. *)
-let rec assignments_in node =
-  (* TODO: Don't concretize the returned list. *)
-  match node with
-    | Ast.Double _
-    | Ast.Int _
-    | Ast.String _
-    | Ast.Var _ -> []
-    | Ast.Call (name, args) -> List.concat (List.map assignments_in args)
-    | Ast.Block exprs -> List.concat (List.map assignments_in exprs)
-    | Ast.If (if_, then_, else_) -> List.concat [assignments_in if_;
-                                                 assignments_in then_;
-                                                 assignments_in else_]
-    | Ast.Assignment (var_name, value) -> var_name :: assignments_in value
-
-let codegen_proto proto context the_module =
-  match proto with
-  | Ast.Prototype (name, arg_types, ret_type) ->
-    (* Make the function type: double(double,double) etc. *)
-    let llvm_arg_types = Array.init (Array.length arg_types) (fun i -> llvm_type arg_types.(i) context) in
-    (* Return and arg types: *)
-    let signature = function_type (llvm_type ret_type context) llvm_arg_types in
-    declare_function name signature the_module
-    (* TODO: Error if a function gets redeclared. *)
-
-let codegen_func func context the_module builder =
-  match func with
-  | Ast.Function (proto, body) ->
-    let the_function = codegen_proto proto context the_module in
-
+  | Ast.TFunction (name, _, body, t) ->
+    let (arg_tipes, ret_tipe) = decomposed_function_tipe t in
+    if !is_generating_function then
+      begin
+        is_generating_function := false; (* so future test-harness calls don't get a stale value *)
+        raise (Error "Inner functions are not allowed yet.")
+      end
+    else
+      is_generating_function := true;
+    let the_function = codegen_declaration name (Array.of_list arg_tipes) ret_tipe in (* TODO: munge names *)
     (* Create a new basic block, and point the builder to the end of it: *)
     let bb = append_block context "entry" the_function in
     position_at_end bb builder;
 
-    Ast.assert_no_unwritten_reads_in body;
+    Ast.assert_no_unwritten_reads_in_scope body;  (* TODO: Make sure we can have a function which reads a global or a var from a surrounding function. *)
+
+    (* TODO: What happens when we encounter an inner function? Don't screw up. Start a new Hashtbl (or go with a COW tree). Watch your block position. I guess generate all funcs as globals with munged names. LLVM IR does expect func ptrs as params to all call instructions, so we could just pass func ptrs around. *)
 
     (* Add allocas for all local vars. They have to be in the entry block, or
        mem2reg won't work. *)
 
     (** If the given var isn't already allocated, gen the alloca, and add an
         entry to the symbol table: *)
-    let add_local_var t var_name =
-      if not (Hashtbl.mem vars var_name) then
-        let stack_slot = build_alloca (llvm_type IntType context) var_name builder in
-        Hashtbl.replace vars var_name (stack_slot, t)
-      in
-    (* For the moment, we support assigning only to ints, just so we can get
-       vars proven out without having to write type inference first. *)
-    List.iter (add_local_var IntType) (assignments_in body);
+    let add_local_var (name_and_tipe:Ast.var_name_and_tipe) =
+      let {Ast.name=var_name; tipe_=var_tipe} = name_and_tipe in
+      match Hashtbl.find_opt vars var_name with
+      | None ->
+        let stack_slot = build_alloca (llvm_type context var_tipe) var_name builder in
+        Hashtbl.replace vars var_name (stack_slot, var_tipe)
+      | Some _ -> ()
+    in
+    List.iter add_local_var (Ast.assignments_and_types_in body);
 
     (* Codegen body: *)
     let ret_val = codegen_expr context the_module builder body in
@@ -189,4 +197,8 @@ let codegen_func func context the_module builder =
     assert_valid_function the_function;
 
     Hashtbl.reset vars;
+    is_generating_function := false;
     the_function
+  | Ast.TExternalFunction (name, t) ->
+    let (arg_tipes, ret_tipe) = (decomposed_function_tipe t) in
+    codegen_declaration name (Array.of_list arg_tipes) ret_tipe

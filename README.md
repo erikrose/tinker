@@ -14,12 +14,12 @@ Everything is vague and loosely held at the moment. Consider this a sketch.
   * So you can do forward references. Toposorting is for computers.
 * Screw colons. I'm always forgetting them. We have line breaks.
 * Goal: the only reason to write out a type name for a variable is documentation. Clear cases (at least) should be inferred.
-* Everything's an expression (including `if` but maybe not assignment). This gives terseness and simplicity (no special ternary expression needed; can factor an `a = ` out of a match clause).
+* Everything's an expression (including `if` and, for now, assignment). This gives terseness and simplicity (no special ternary expression needed; can factor an `a = ` out of a match clause).
 * Definitely want to be able to pass functions around. (Thus, compile-time call graphs will not always be exhaustive, limiting some optimizations. However, I imagine we can still do optimizations for static function calls.)
 * I love iterators. Probably have those.
 * Perhaps avoid breaking-returns. Though it sure is nice to be able to grep for return statements when trying to figure out what a function returns. And explicit returns are also nice because you don't then end up accidentally returning stuff which callers then come to depend on. Or unintentionally making your return type non-void through inference. Alright, I've talked myself out of it.
 * List comps with filters. Map/reduce. All those things that let you focus syntactically on what you want, not how to get it. Resolve all applicable questions in favor of what lets you focus on what you want rather than how to get it. That's what you care about when trying to understand a program, which is how most time is spent.
-* Still no variable declarations, folks. They're noise to read and bookkeeping to do. Being able to use tighter-scoped vars as a crutch inside a function that should be made shorter anyway is not sufficient justification. Having vars go out of scope as soon as they're no longer used should be a matter for the optimizer (and should matter only for embedded systems). (But should we be able to rebind a var to a string later in a function if it was an int earlier?)
+* Still no variable declarations, folks. They're noise to read and bookkeeping to do. Being able to use tighter-scoped vars as a crutch inside a function that should be made shorter anyway is not sufficient justification. (But should we be able to rebind a var to a string later in a function if it was an int earlier? No, because that's in tension with type inference: it'd be a lot harder to figure out what type a var is if it's effectively several vars, each of a different type, and which is in scope keeps changing. You'd have to be able to statically predict when each type is in scope when so you can alpha-rename a multi-type var into several single-type ones. That would be hard, if not impossible.)
 * ? Block-structured or function-scoped? Probably the latter. OCaml-style block structuring weirds language, making var bindings start new blocks, which people can't tolerate the indentation of, so then they weird the indentation, and then the block representation has to live in your head, and semicolons crop up in nonobvious places. (But it buys you a lack of undefined-var errors, trivially.) Function scoping is a nice middleground where you can have an open playground (for fast development and prototyping) but bounded by the limits of the function.
     Perhaps those are extremes and the middleground is just not having var declarations introduce new blocks, like C.
 * Pure enough to use for config. For example, it should be able to express metadata for its own modules, like language version #.
@@ -27,12 +27,52 @@ Everything is vague and loosely held at the moment. Consider this a sketch.
 * Probably don't autocurry. It makes for confusing error messages for noobs. Or at least improve the errors so they point out that you passed the wrong number of args to a function (if the curried interpretation doesn't otherwise make sense).
 * D has GC but lets you turn it off for sections. Study it. V has ARC (actually avoiding most instances of refcounting) and then GC for cycles. But atm it makes you decide which ref is weak.
 * One of the aesthetic goals is to declutter. Syntax that is "for the machine" or "for the compiler" should be minimized. (This nudges us away from super-low-level applications, but perhaps a Sufficiently Advanced Compiler or special-purpose notation could keep those avenues open.) Declarations are minimal. GC exists. Exceptions rather than explicit error checking. Even whitespace over braces might be an example of this. The intention of minimizing clutter is to maximize the amount of mental space a developers can dedicate to their applications. Clutter should *not* be reduced past the point where it makes code harder to read.
+* You can't keep people from making a mess by force. (Style rule enforcement can make code *appear* clean but can't do much for comprehensibility beyond a surface polish.) But what we can do is give them the capability to *not* make a mess. Let them omit type declarations when they're just noise. Let them add them when they're informative. Letting humans, which are the only parties with perspective, decide what's important to state is the only path to the highest level of comprehensibility.
+
+## A Bit of Broader Language Design
+
+What I first care about when exposed to a new language—what determines the sort of software architecture you can do with it—are its structures: data structures, code structures (classes, functions, multimethods, modules). Design those first, as the rest is, relatively speaking, window dressing: syntax and loops and such will follow.
+
+Focus especially on data structures. When reading a program (and reading is where the majority of programming time is spent), nothing is more illuminating than data structures. "A program well-represented is 3/4 solved" and all that. The more the in-program representation of types and such ape the appearance of state-of-the-art documentation, the more we've succeeded.
+
+The overarching language-design strategy is to identify good things, figure out how to have them all, and, if that is impossible, figure out which things are in tension with each other and come up with the best tradeoff between them.
+
+### Data Structures
+
+#### Things I want
+
+* Comprehensiveness guarantees, a la `match`
+* Elaboration
+* Conciseness like ADTs
+
+Could marry comprehensiveness guarantees with multiple dispatch by defining a bunch of types, then saying "these types make up an enum" (thus creating the equivalent of variant types), then throw a fit if somebody defines a method on one of the types but not the rest. (Multimethods could hopefully take the place of match statements.) Basically, promote the variant constructors to the top level. This also solves the problem in OCaml where TFunction needs to take a FunctionType but the tightest we can constrain it to is texpr.
+
+    ```
+    type BoolType
+    type TipeVar {var:int}
+    type FunctionType {args:tipe[], return:tipe}
+    
+    enum tipe is
+        BoolType or TipeVar or FunctionType
+
+    fun show t:tipe
+        
+    ```
+
+* Lists of homogeneous things—not just all of the same type but even of just a common interface, like Stringable.
+* Maps of some kind.
+* Structs. Something to let us compose a bunch of fields into a single thing. (For example, we could use these to implement a cons cell, and the user wouldn't have to be bothered about the ptr field.)
+* Struct elaboration somehow. Having a way to say "Yes, everything in that struct, plus this thing." Subclasses do that, and I miss it in OCaml, where its absence leads to a lot of repetition: for example, AST types for the parser and then those-but-with-types for the type annotator. Is composition enough? I feel like struct elaboration might have a nice symmetry with multimethods (being function elaboration), both in the abstract and in the concrete case of a multimethod having specializations both on the original struct and on elaborations of it. OTOH, maybe function elaboration is just one function calling another.
+* Classes? Maybe. What are they good for?
+    * Abstract algos (acetates). Could also be done with structs with default values. And some concept of “this”. That may basically be a class. Is the Turtles-style calling convention in tension with classes? Does it become impossible to get ahold of “this”?
+    * Encapsulation. This is important in that it makes programs easier to reason about: as a caller, you don't have to think about private things, and you don't have to worry some other caller has screwed them up.
+* Mutability: always, rarely, never?
 
 ## Types
 ### Possibilities
-* No classes, just typed structs (or interfaces?) and type- (or interface?)-dispatched functions
+* No classes, just typed structs (or interfaces?) and type- (or interface?)-dispatched functions. Abstract algorithms, one motivation for acetate-like inheritance, can be implemented by specializing methods (or even multimethods, to improve upon the class-based approach) on subtypes and making sure the most specialized method that matches is always chosen.
 * ADTs
-* Generics through compile-time functors. Or maybe Hindley-Milner makes that pointless.
+* Generics through compile-time functors. Though I guess Hindley-Milner's polymorphism makes that pointless.
 
 ### Deciding among possibilities
 * I'd like for things to be retrofittable. IOW, be able to attach new routines to a stdlib type without having to stick new interface declarations in the stdlib.
@@ -118,6 +158,15 @@ fun foo
         -- Anyway, the cost of going with function-scoping is that you have to declare nonlocals you want to write (or have a special = operator for that). That's a rarity. (It's also something of an antipattern: it promotes hidden mutations that would better be expressed through return values. Maybe don’t even support it.) The dividend is you don't need to declare vars (or read the usually-just-noise declarations). Declarations exist solely to broaden the scope of a var, assuming a language in which vars are otherwise assumed to be local to the block they're mentioned in.
         -- It's important to allow shadowing of nonlocals in a function; otherwise, you can't paste functions around without reading them carefully to make sure they don't overwrite nonlocals.
         -- A read in an if is fine if the if has the same or a logically equivalent condition as one which previously wrote. For ifs which write and are nested, the whole chain of nested if conditions (up to the point where the writes and the reads share a common encloser) will have to be satisfied...or something. Maybe I can just use unification and get some more milage out of the unifier I'm going to need anyway for Hindley-Milner.
+
+Maybe WYSIWYG, grouping-wise:
+6+1 * 3+1 = 28
+
+collect (item :: rest) some_list
+...could be abbreviated as...
+collect item::rest some_list
+...which scans better.
+If you're going to have significant whitespace, have significant whitespace. :-)
 ```
 
 ## Status
@@ -125,12 +174,16 @@ fun foo
 Right now, "Hello, world" is hard-coded into the compiler in the form of AST expressions. There's no parser yet, because I don't know what I want the syntax to look like. To install dependencies...
 
 ```
-opam install llvm ounit2
+opam install ctypes-foreign llvm ounit2 ppx_deriving dune
 ```
 
 Also install the LLVM headers.
 
 To compile and run "Hello, world", run `make run`.
+
+## After a major OS update
+
+You might have to `opam upgrade` things. If you update just one thing, it'll say "Hey, you've got to recompile the rest because your system changed". Let it.
 
 ## To do
 * √ Be able to declare externals so we don't need any C.
@@ -155,20 +208,48 @@ To compile and run "Hello, world", run `make run`.
 
     Sum types can be represented by alloca-ing enough space for the largest alternative and also making space (whether as a separate pseudovar or part of a struct that contains the enum and the var value) for the enum value. Make sure it works nicely with nested enumerations, like `foo:(int|Snoo);  Snoo = double|string`.
 
-    * Complain on the possibility of undefined var reads. Maybe for this it could be good enough just to assert that every read in a CFG node has a write in a dominator or in the same node but before the read. (With Lengauer-Tarjan, we can find dominators in O(m log n).) Or assert that every read hits a write via every path back to the entry block. Definitely write this against the CFG, lest we get some control structure later that has a nonobvious, nonlexical relationship to control flow. Or would it be possible and simpler to have a big match clause where each syntactical construct makes sure a given var is found in each of its (potential) branches? We could cache for speed.
+    * √ Complain on the possibility of undefined var reads. Maybe for this it could be good enough just to assert that every read in a CFG node has a write in a dominator or in the same node but before the read. (With Lengauer-Tarjan, we can find dominators in O(m log n).) Or assert that every read hits a write via every path back to the entry block. Definitely write this against the CFG, lest we get some control structure later that has a nonobvious, nonlexical relationship to control flow. Or would it be possible and simpler to have a big match clause where each syntactical construct makes sure a given var is found in each of its (potential) branches? We could cache for speed.
 
         When making example CFGs for trying out analysis ideas, using `rand()` calls as the condition in `if` expressions comes in handy: it lets you pick best-case and worst-case paths at your discretion without painstakingly constructing code that does whichever you were looking for. Sometimes it lets you halve the amount of code just by choosing different branches each time around a loop.
-    * Support other types than int. I don't see any other way to do this than to write an honest-to-goodness constraint solver for type inference. Perhaps it's possible that we wouldn't need one just for inference, but we'd sure need one for type checking. If somebody is inconsistent with types, we need that unification failure to notice the error. Here's a great summary of unification for type inference, even including some OCaml code: https://www.cs.cornell.edu/courses/cs3110/2011sp/Lectures/lec26-type-inference/type-inference.htm.
+    * Support other types than int. I don't see any other way to do this than to write an honest-to-goodness constraint solver for type inference. Perhaps it's possible that we wouldn't need one just for inference, but we'd sure need one for type checking. If somebody is inconsistent with types, we need that unification failure to notice the error. Here's a great summary of unification for type inference, even including some OCaml code: https://www.cs.cornell.edu/courses/cs3110/2011sp/Lectures/lec26-type-inference/type-inference.htm. Start with local inference for practice, then expand. A unification of a set of pairs is a single set of var bindings that unifies every pair.
+
+        * Make func an expr so it can have a type.
+        * Make funcs first-class so we have something useful to do with function expressions.
+            * What do we do about function names? Munge them all?  Probably at first. Even if we have a `fun foo(a, b, c)` syntax, it can desugar to `foo = fun(a, b, c)`.
+            * How do we give functions names for external calls? Infer from global assignment varname?
+            * So that the linker can hook up the symbols, we have to have at least the addresses right at link time. I suppose we could put the values in place later with an `initialize()`.
+            * Remember that we'll have to use external linkage (and thus names) for anything we want to get at from another module, not just from another language. And we'll probably go with 1 module = 1 file. Why complicate things? (We want to have multiple modules anyway for the effective caching that separate compilation brings.)
+            * Does w^x mean we can't have a module-level initializer?
+            * Maybe to start, we can have only global functions (unmunged), outlaw inner functions for now (just unneeded complexity keeping us from committing), but let us still assign those global functions to vars. Then do unification before I forget how. Next, write a test to make sure it complains on nested functions (mostly to make sure I know OCaml) and then see if passing a func ptr around and calling it works. Working out how we want to do reads to globals will require a lot of language design: we'd have to change our read-before-write detector to take globals into account, for instance. Let's just make inner functions work. Or meh, maybe the former is easier; with the latter, we have to change Ast.Call anyway to take vars. So we might as well just change Var resolution to see globals and the detector to put up with them too. But then we still have to change Call anyway. So locals it is. And we'll just have the type checker make sure the number and types of args are right.
+            * After that, do inner functions, which will mean passing closures around (whenever a function contains free vars) instead of just func ptrs: records like `{env, func_ptr}` and generating `call func_ptr(env, …)`.
+        * Descend expr tree to create a constraint (a pair) for each expr (and subexpr).
+        * Unify the pairs to infer the types.
+        * Here's how you handle locals. I guess you have to alpha rename and feed in all the constraints at once, local and global. You can't demand to do the globals first and then one set of locals at a time, because there might be info in the local scope that needs to percolate out and combine with an arg value in another local scope to inform the return type on a third function. Figure out a fully qualified name for symbols or just use the Var instance itself or generate a unique int (to pair with the var name) or something.
+        * Do I want to be able to do inference on just one module at a time so we can have module-at-a-time compilation? Is there enough info therein, or will we need to declare some types?
 * Raise an error if a function returns a different type than declared. (This should be taken care of by the unifier.)
 * GC
 * Loops. All looping constructs can be lowered to an infinite loop plus a break statement. Infinite loops can be lowered to recursion with TCO. Not sure about the breaks.
-* Decide on dispatch. Will it be hard for a human to find where a function's code is?
+
+    If everything is an expr, what should a loop's value be? Its last statement seems arbitrary and rarely useful. What if it were a list of the values of its last statements? That would be often useful, plus it serves the purpose of a list comp!
+
+    ```
+    for x in range(8)
+        x**2
+    ```
+    We can prove whether anybody does anything with the value and avoid collecting it if not. Of course, this will require all terminal statements of a loop to have the same type. Is that going to be too annoying? Maybe we could require that only if you're doing anything with the value.
+* Decide on dispatch. Will it be hard for a human to find where a function's code is? https://www.ocaml.org/releases/4.11/htmlman/lablexamples.html lays out one cohesive system of kwargs + inference and even suggests some naming conventions.
 * Do non-primitive types, like ML enums. We won't have type erasure on enums because we'll have to be able to distinguish among variants in `match` clauses.
 * We might be able to get away with just recursion for type inference, as long as we explicitly declare function args and return types (at least temporarily): https://mukulrathi.co.uk/create-your-own-programming-language/intro-to-type-checking/
 * Make protos unnecessary (except for externals, I guess).
 * Design the language.
+    * We pretty much need to be able to pass around multimethods if we want to be able to retain the pattern where we call print() on an array of things and have them all print themselves.
+    * If we do our Turtles-style function call syntax, we'll have to figure out what record member access looks like. rec.foo has to be spelled differently than “foo rec” or else it’ll shadow the function foo. And it’d be a disaster to suddenly have foo in scope just because a record with that field name is in scope.
+    * Piecewise functions will be important for ergonomics since we have only function scope. It's nice to have a scope per `match` variant, but we can do the same by making our functions piecewise.
 * Exceptions. Undesirable in a pure language because they can pop out any time unexpectedly. So require you catch them--and in the direct-calling stack frame? That makes them basically inferred option types without exceptions' distinguishing characteristic: multi-frame stack unwinding.
 
     If we have exceptions, the `catch` clauses should probably look like `match` clauses and be able to pattern-match and destructure thrown values. A thrown value can be any old object with a constructor: anything that can be matched against.
 
     For applications that cannot tolerate exceptions, we can have a `no_except` signifier applied to a function that cues the compiler to throw an error if any exception that could be raised within a function is not caught.
+    
+    typed effects or something. https://github.com/ocamllabs/ocaml-effects-tutorial
+* Think about separate compilation. This will be in tension with global type inference.

@@ -1,0 +1,5 @@
+(executable
+  (name test)
+  (libraries ctypes.foreign llvm llvm.analysis llvm.executionengine ounit2)
+  (modes (byte exe))
+  (preprocess (pps ppx_deriving.show)))
