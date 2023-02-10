@@ -181,6 +181,10 @@ Also install the LLVM headers.
 
 To compile and run "Hello, world", run `make run`.
 
+## After a major OS update
+
+You might have to `opam upgrade` things. If you update just one thing, it'll say "Hey, you've got to recompile the rest because your system changed". Let it.
+
 ## To do
 * √ Be able to declare externals so we don't need any C.
     * √ We'd need strings too, though (or at least "bytes"), for printf's format string. So add externals support and support for multiple types.
